@@ -171,7 +171,7 @@ router.delete('/trash', (_req, res) => {
 });
 
 // GET /api/v1/recent - Recent sessions across all projects / 跨项目最近会话
-const ALLOWED_HOURS = new Set([12, 24, 168, 720]);
+const ALLOWED_HOURS = new Set([3, 6, 12, 24, 168, 720]);
 router.get('/recent', async (req, res) => {
   try {
     const raw = parseInt(req.query['hours'] as string, 10) || 24;

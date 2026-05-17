@@ -17,6 +17,8 @@ interface Props {
 }
 
 const RANGES: { hours: number; labelKey: string }[] = [
+  { hours: 3, labelKey: 'recent.range_3h' },
+  { hours: 6, labelKey: 'recent.range_6h' },
   { hours: 12, labelKey: 'recent.range_12h' },
   { hours: 24, labelKey: 'recent.range_1d' },
   { hours: 168, labelKey: 'recent.range_7d' },
@@ -78,6 +80,7 @@ export default function RecentPanel({ onNavigate }: Props) {
   const [hours, setHours] = useState(24);
   const [spinning, setSpinning] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('board');
+  const [statusFilter, setStatusFilter] = useState<SessionStatus | 'all'>('all');
 
   const load = useCallback(async (h: number, signal?: AbortSignal) => {
     setLoading(true);
@@ -103,13 +106,14 @@ export default function RecentPanel({ onNavigate }: Props) {
     load(hours).finally(() => setTimeout(() => setSpinning(false), 600));
   };
 
-  const sortedSessions = useMemo(() =>
-    [...sessions].sort((a, b) => {
+  const sortedSessions = useMemo(() => {
+    const filtered = statusFilter === 'all' ? sessions : sessions.filter(s => s.status === statusFilter);
+    return [...filtered].sort((a, b) => {
       const so = STATUS_ORDER[a.status] - STATUS_ORDER[b.status];
       if (so !== 0) return so;
       return b.lastTimestamp.localeCompare(a.lastTimestamp);
-    }),
-  [sessions]);
+    });
+  }, [sessions, statusFilter]);
 
   const maxTokens = useMemo(() => {
     let max = 1;
@@ -184,7 +188,7 @@ export default function RecentPanel({ onNavigate }: Props) {
         </div>
 
         {/* Range filter pills / 时间范围筛选 */}
-        <div className="flex items-center gap-2 mb-8">
+        <div className="flex items-center gap-2 mb-4 flex-wrap">
           {RANGES.map((r) => (
             <button
               key={r.hours}
@@ -195,6 +199,31 @@ export default function RecentPanel({ onNavigate }: Props) {
               {t(r.labelKey)}
             </button>
           ))}
+        </div>
+
+        {/* Status filter pills / 状态筛选 */}
+        <div className="flex items-center gap-2 mb-8 flex-wrap">
+          {(['all', 'active', 'idle', 'ended'] as const).map((s) => {
+            const isActive = statusFilter === s;
+            const style = s !== 'all' ? STATUS_STYLES[s] : null;
+            return (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-semibold cursor-pointer transition-all ${isActive ? 'ring-1' : ''}`}
+                style={{
+                  background: isActive && style ? style.bg : 'var(--surface-2)',
+                  color: isActive && style ? style.text : isActive ? 'var(--accent)' : 'var(--txt-3)',
+                  ringColor: isActive ? 'currentColor' : undefined,
+                }}
+              >
+                {style && (
+                  <span className="w-[6px] h-[6px] rounded-full flex-shrink-0" style={{ background: style.dot }} />
+                )}
+                {s === 'all' ? t('recent.status_all') : t(`recent.status_${s}`)}
+              </button>
+            );
+          })}
         </div>
 
         {/* Loading / 加载中 */}
