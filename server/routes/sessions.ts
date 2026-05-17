@@ -6,6 +6,7 @@ import { Router } from 'express';
 import {
   listProjects,
   listSessions,
+  listRecentSessions,
   getSession,
   getSessionPage,
   getSessionMessages,
@@ -166,6 +167,25 @@ router.delete('/trash', (_req, res) => {
     res.json({ success: true, deleted: result.deleted });
   } else {
     res.status(400).json({ error: result.error });
+  }
+});
+
+// GET /api/v1/recent - Recent sessions across all projects / 跨项目最近会话
+const ALLOWED_HOURS = new Set([12, 24, 168, 720]);
+router.get('/recent', async (req, res) => {
+  try {
+    const raw = parseInt(req.query['hours'] as string, 10) || 24;
+    const hours = ALLOWED_HOURS.has(raw) ? raw : 24;
+    const items = await listRecentSessions(hours);
+    const now = Date.now();
+    const sessions = items.map(({ meta, mtimeMs }) => {
+      const age = now - mtimeMs;
+      const status = age < 5 * 60_000 ? 'active' : age < 3600_000 ? 'idle' : 'ended';
+      return { ...meta, status };
+    });
+    res.json({ sessions });
+  } catch (err) {
+    res.status(500).json({ error: `Failed to list recent sessions: ${err}` });
   }
 });
 

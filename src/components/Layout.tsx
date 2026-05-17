@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next';
 import {
   FolderTree, Search, Shield, BarChart3, Trash2, LogOut,
-  Sun, Moon, ChevronLeft, Menu, WifiOff,
+  Sun, Moon, ChevronLeft, Menu, WifiOff, Clock,
   TrendingUp, Activity, Database,
 } from 'lucide-react';
 import { projects as projectsApi, invalidateEtagCache, type ProjectInfo, type SessionMeta } from '../utils/api';
@@ -22,6 +22,7 @@ const ChatViewer = lazy(() => import('./ChatViewer'));
 const SearchPanel = lazy(() => import('./SearchPanel'));
 const AuditPanel = lazy(() => import('./AuditPanel'));
 const TrashPanel = lazy(() => import('./TrashPanel'));
+const RecentPanel = lazy(() => import('./RecentPanel'));
 
 function PanelFallback() {
   return (
@@ -31,7 +32,7 @@ function PanelFallback() {
   );
 }
 
-type View = 'projects' | 'search' | 'audit' | 'trash' | 'stats';
+type View = 'projects' | 'recent' | 'search' | 'audit' | 'trash' | 'stats';
 
 interface LayoutProps {
   onLogout: () => void;
@@ -44,7 +45,7 @@ export default function Layout({ onLogout }: LayoutProps) {
     (!localStorage.getItem('csm_dark') && window.matchMedia('(prefers-color-scheme: dark)').matches)
   );
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [view, setView] = useState<View>('projects');
+  const [view, setView] = useState<View>('recent');
   const [projectList, setProjectList] = useState<ProjectInfo[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [selectedSession, setSelectedSession] = useState<{ projectId: string; sessionId: string } | null>(null);
@@ -168,6 +169,7 @@ export default function Layout({ onLogout }: LayoutProps) {
 
   // Nav items / 导航项
   const navItems: { id: View; icon: React.ReactNode; label: string }[] = [
+    { id: 'recent', icon: <Clock size={20} />, label: t('nav.recent') },
     { id: 'projects', icon: <FolderTree size={20} />, label: t('nav.projects') },
     { id: 'search', icon: <Search size={20} />, label: t('nav.search') },
     { id: 'audit', icon: <Shield size={20} />, label: t('nav.audit') },
@@ -318,6 +320,11 @@ export default function Layout({ onLogout }: LayoutProps) {
           {view === 'search' && (
             <Suspense fallback={<PanelFallback />}>
               <SearchPanel onNavigate={handleSelectSession} />
+            </Suspense>
+          )}
+          {view === 'recent' && (
+            <Suspense fallback={<PanelFallback />}>
+              <RecentPanel onNavigate={handleSelectSession} />
             </Suspense>
           )}
           {view === 'audit' && selectedSession && (

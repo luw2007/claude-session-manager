@@ -85,6 +85,40 @@ export async function listProjects(): Promise<ProjectInfo[]> {
 }
 
 /**
+ * List recently active sessions across ALL projects / 列出所有项目中最近活跃的会话
+ */
+export interface RecentSessionItem { meta: SessionMeta; mtimeMs: number }
+
+export async function listRecentSessions(hours: number): Promise<RecentSessionItem[]> {
+  const projectsDir = getProjectsDir();
+  if (!existsSync(projectsDir)) return [];
+
+  const cutoff = Date.now() - hours * 3600_000;
+  const entries = readdirSync(projectsDir, { withFileTypes: true });
+  const items: RecentSessionItem[] = [];
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const dirPath = join(projectsDir, entry.name);
+    const jsonlFiles = readdirSync(dirPath).filter((f) => f.endsWith('.jsonl'));
+
+    for (const file of jsonlFiles) {
+      const filePath = join(dirPath, file);
+      try {
+        const stat = statSync(filePath);
+        if (stat.mtimeMs < cutoff) continue;
+        const sessionId = file.replace(/\.jsonl$/, '');
+        const meta = await getOrParseMeta(entry.name, sessionId, filePath);
+        items.push({ meta, mtimeMs: stat.mtimeMs });
+      } catch { /* skip */ }
+    }
+  }
+
+  items.sort((a, b) => b.meta.lastTimestamp.localeCompare(a.meta.lastTimestamp));
+  return items;
+}
+
+/**
  * List sessions for a project / 列出项目的所有会话
  */
 export async function listSessions(projectId: string): Promise<SessionMeta[]> {

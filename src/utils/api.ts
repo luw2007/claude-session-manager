@@ -204,6 +204,17 @@ export const projects = {
     request<{ sessions: SessionMeta[] }>(`/projects/${projectId}/sessions`, { signal }),
 };
 
+export type SessionStatus = 'active' | 'idle' | 'ended';
+
+export interface RecentSession extends SessionMeta {
+  status: SessionStatus;
+}
+
+export const recent = {
+  list: (hours = 24, signal?: AbortSignal) =>
+    request<{ sessions: RecentSession[] }>(`/recent?hours=${hours}`, { signal }),
+};
+
 export interface SessionPage {
   meta: SessionMeta;
   messages: ParsedMessage[];

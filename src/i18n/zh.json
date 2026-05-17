@@ -19,6 +19,7 @@
   },
   "nav": {
     "projects": "项目",
+    "recent": "最近",
     "search": "搜索",
     "audit": "审计",
     "stats": "统计",
@@ -107,5 +108,19 @@
     "dark_mode": "暗色模式",
     "light_mode": "亮色模式",
     "language": "语言"
+  },
+  "recent": {
+    "title": "最近会话",
+    "refresh": "刷新",
+    "no_sessions": "未找到最近的会话。",
+    "range_12h": "12h",
+    "range_1d": "1d",
+    "range_7d": "7d",
+    "range_30d": "30d",
+    "view_list": "列表",
+    "view_board": "看板",
+    "status_active": "活跃",
+    "status_idle": "空闲",
+    "status_ended": "已结束"
   }
 }
