@@ -109,6 +109,7 @@ export async function listRecentSessions(hours: number): Promise<RecentSessionIt
         if (stat.mtimeMs < cutoff) continue;
         const sessionId = file.replace(/\.jsonl$/, '');
         const meta = await getOrParseMeta(entry.name, sessionId, filePath);
+        if (meta.lastTimestamp && new Date(meta.lastTimestamp).getTime() < cutoff) continue;
         items.push({ meta, mtimeMs: stat.mtimeMs });
       } catch { /* skip */ }
     }
