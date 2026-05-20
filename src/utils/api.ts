@@ -136,6 +136,7 @@ export interface SessionMeta {
   id: string;
   projectPath: string;
   projectName: string;
+  baseProjectName: string;
   filePath: string;
   firstTimestamp: string;
   lastTimestamp: string;

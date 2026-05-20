@@ -96,6 +96,7 @@ export interface SessionMeta {
   id: string;               // Session UUID / 会话 UUID
   projectPath: string;       // Encoded project path / 编码后的项目路径
   projectName: string;       // Decoded human-readable name / 解码后的可读名称
+  baseProjectName: string;   // Parent project name (worktrees grouped with parent) / 基础项目名（worktree 与父项目合并）
   filePath: string;          // Absolute path to .jsonl file / JSONL 文件绝对路径
   firstTimestamp: string;    // First message time / 首条消息时间
   lastTimestamp: string;     // Last message time / 末条消息时间

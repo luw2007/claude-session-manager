@@ -38,7 +38,35 @@ export function decodeProjectPath(encoded: string): string {
 export function getProjectDisplayName(encoded: string): string {
   const decoded = decodeProjectPath(encoded);
   const parts = decoded.split('/').filter(Boolean);
-  // Return last 2 segments for context / 返回最后两段以提供上下文
+
+  // Detect worktree paths: /.claude/worktrees/<name>
+  // 检测 worktree 路径
+  const wtIdx = parts.indexOf('.claude');
+  if (wtIdx >= 0 && parts[wtIdx + 1] === 'worktrees' && parts[wtIdx + 2]) {
+    const parentParts = parts.slice(0, wtIdx);
+    const parentName = parentParts.slice(-2).join('/') || encoded;
+    const wtName = parts.slice(wtIdx + 2).join('/');
+    return `${parentName} ⌥ ${wtName}`;
+  }
+
+  return parts.slice(-2).join('/') || encoded;
+}
+
+/**
+ * Get the base (parent) project name, stripping worktree suffix.
+ * For grouping worktrees with their parent project.
+ * 获取基础项目名（去除 worktree 后缀），用于分组
+ */
+export function getBaseProjectName(encoded: string): string {
+  const decoded = decodeProjectPath(encoded);
+  const parts = decoded.split('/').filter(Boolean);
+
+  const wtIdx = parts.indexOf('.claude');
+  if (wtIdx >= 0 && parts[wtIdx + 1] === 'worktrees' && parts[wtIdx + 2]) {
+    const parentParts = parts.slice(0, wtIdx);
+    return parentParts.slice(-2).join('/') || encoded;
+  }
+
   return parts.slice(-2).join('/') || encoded;
 }
 
@@ -156,6 +184,7 @@ export async function parseSessionFile(filePath: string): Promise<ParsedSession>
     id: fileName,
     projectPath: projectDir,
     projectName: getProjectDisplayName(projectDir),
+    baseProjectName: getBaseProjectName(projectDir),
     filePath,
     firstTimestamp,
     lastTimestamp,
@@ -390,6 +419,7 @@ export async function parseSessionMeta(filePath: string): Promise<{
     id: fileName,
     projectPath: projectDir,
     projectName: getProjectDisplayName(projectDir),
+    baseProjectName: getBaseProjectName(projectDir),
     filePath,
     firstTimestamp,
     lastTimestamp,

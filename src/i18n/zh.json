@@ -124,6 +124,7 @@
     "status_all": "全部",
     "status_active": "活跃",
     "status_idle": "空闲",
-    "status_ended": "已结束"
+    "status_ended": "已结束",
+    "group_by_project": "按项目分组"
   }
 }

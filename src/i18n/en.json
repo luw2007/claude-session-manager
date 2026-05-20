@@ -124,6 +124,7 @@
     "status_all": "All",
     "status_active": "Active",
     "status_idle": "Idle",
-    "status_ended": "Ended"
+    "status_ended": "Ended",
+    "group_by_project": "Group by Project"
   }
 }

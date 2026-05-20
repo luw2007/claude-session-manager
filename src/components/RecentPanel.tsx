@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Clock, MessageSquare, GitBranch, Bot, RefreshCw,
-  FolderOpen, List, LayoutGrid,
+  FolderOpen, FolderClosed, List, LayoutGrid, Layers, ChevronDown, ChevronRight,
 } from 'lucide-react';
 import { recent as recentApi, type RecentSession, type SessionStatus } from '../utils/api';
 
@@ -73,6 +73,128 @@ function StatusBadge({ status }: { status: SessionStatus }) {
   );
 }
 
+function BoardCard({ session, onNavigate }: { session: RecentSession; onNavigate: Props['onNavigate'] }) {
+  return (
+    <div
+      onClick={() => onNavigate(session.projectPath, session.id)}
+      className="group card p-5 cursor-pointer hover:translate-y-[-2px] animate-fade-in flex flex-col"
+    >
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <StatusBadge status={session.status} />
+        <span
+          className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md truncate max-w-[140px]"
+          style={{ background: 'var(--surface-2)', color: 'var(--accent)' }}
+          title={session.projectName}
+        >
+          <FolderOpen size={10} className="flex-shrink-0" />
+          <span className="truncate">{session.projectName}</span>
+        </span>
+      </div>
+      <p
+        className="text-[14px] font-semibold leading-snug mb-3 line-clamp-2 group-hover:text-[color:var(--accent)] transition-colors"
+        style={{ color: 'var(--txt-1)', letterSpacing: '-0.012em' }}
+      >
+        {session.summary || session.id}
+      </p>
+      <div className="flex items-center gap-3 mt-auto flex-wrap">
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium" style={{ color: 'var(--txt-3)' }}>
+          <Clock size={11} />
+          {formatTime(session.lastTimestamp)}
+        </span>
+        <span className="inline-flex items-center gap-1 text-[11px] font-medium" style={{ color: 'var(--txt-3)' }}>
+          <MessageSquare size={11} />
+          {session.messageCount}
+        </span>
+        {session.gitBranch && (
+          <span className="inline-flex items-center gap-1 text-[11px] font-medium truncate max-w-[100px]" style={{ color: 'var(--txt-3)' }} title={session.gitBranch}>
+            <GitBranch size={11} className="flex-shrink-0" />
+            <span className="truncate">{session.gitBranch}</span>
+          </span>
+        )}
+        {session.isAgent && (
+          <span className="badge badge-tool !text-[10px] !px-1.5 !py-0">
+            <Bot size={10} className="mr-0.5" />
+            Agent
+          </span>
+        )}
+        <span
+          className="text-[11px] font-bold px-1.5 py-0.5 rounded ml-auto"
+          style={{ background: 'var(--surface-2)', color: 'var(--txt-2)', fontFamily: 'JetBrains Mono, monospace' }}
+        >
+          {formatTokens(session.totalTokens)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function ListRow({ session, onNavigate, maxTokens }: { session: RecentSession; onNavigate: Props['onNavigate']; maxTokens: number }) {
+  const { t } = useTranslation();
+  const totalTokens = (session.totalTokens.input_tokens || 0) + (session.totalTokens.output_tokens || 0);
+  const tokenPct = Math.round((totalTokens / maxTokens) * 100);
+
+  return (
+    <div
+      onClick={() => onNavigate(session.projectPath, session.id)}
+      className="group card p-6 cursor-pointer hover:translate-y-[-2px] animate-fade-in"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <StatusBadge status={session.status} />
+            <span
+              className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md"
+              style={{ background: 'var(--surface-2)', color: 'var(--accent)' }}
+            >
+              <FolderOpen size={11} />
+              {session.projectName}
+            </span>
+            {session.isAgent && (
+              <span className="badge badge-tool">
+                <Bot size={11} className="mr-1" />
+                {t('sessions.agent_session')}
+              </span>
+            )}
+          </div>
+          <p
+            className="text-[16px] font-semibold truncate leading-snug group-hover:text-[color:var(--accent)] transition-colors"
+            style={{ color: 'var(--txt-1)', letterSpacing: '-0.012em' }}
+          >
+            {session.summary || session.id}
+          </p>
+          <div className="flex items-center gap-4 mt-3 flex-wrap">
+            <span className="inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ color: 'var(--txt-3)' }}>
+              <Clock size={13} />
+              {formatTime(session.lastTimestamp)}
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ color: 'var(--txt-3)' }}>
+              <MessageSquare size={13} />
+              {session.messageCount} {t('sessions.messages')}
+            </span>
+            {session.gitBranch && (
+              <span className="inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ color: 'var(--txt-3)' }}>
+                <GitBranch size={13} />
+                {session.gitBranch}
+              </span>
+            )}
+            <span
+              className="text-[12px] font-bold px-2 py-0.5 rounded-md ml-auto"
+              style={{ background: 'var(--surface-2)', color: 'var(--txt-2)', fontFamily: 'JetBrains Mono, monospace' }}
+            >
+              {formatTokens(session.totalTokens)} tok
+            </span>
+          </div>
+          <div className="mt-4">
+            <div className="token-bar !h-1.5">
+              <div className="token-bar-fill" style={{ width: `${tokenPct}%` }} />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function RecentPanel({ onNavigate }: Props) {
   const { t } = useTranslation();
   const [sessions, setSessions] = useState<RecentSession[]>([]);
@@ -81,6 +203,17 @@ export default function RecentPanel({ onNavigate }: Props) {
   const [spinning, setSpinning] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>('board');
   const [statusFilter, setStatusFilter] = useState<SessionStatus | 'all'>('all');
+  const [groupByProject, setGroupByProject] = useState(false);
+  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
+
+  const toggleCollapse = useCallback((projectPath: string) => {
+    setCollapsedProjects(prev => {
+      const next = new Set(prev);
+      if (next.has(projectPath)) next.delete(projectPath);
+      else next.add(projectPath);
+      return next;
+    });
+  }, []);
 
   const load = useCallback(async (h: number, signal?: AbortSignal) => {
     setLoading(true);
@@ -124,6 +257,21 @@ export default function RecentPanel({ onNavigate }: Props) {
     return max;
   }, [sessions]);
 
+  const groupedSessions = useMemo(() => {
+    if (!groupByProject) return null;
+    const groups = new Map<string, { projectName: string; sessions: RecentSession[] }>();
+    for (const s of sortedSessions) {
+      const key = s.baseProjectName || s.projectName;
+      if (!groups.has(key)) groups.set(key, { projectName: key, sessions: [] });
+      groups.get(key)!.sessions.push(s);
+    }
+    return [...groups.entries()].sort((a, b) => {
+      const aLatest = a[1].sessions[0]?.lastTimestamp || '';
+      const bLatest = b[1].sessions[0]?.lastTimestamp || '';
+      return bLatest.localeCompare(aLatest);
+    });
+  }, [sortedSessions, groupByProject]);
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="px-10 pt-10 pb-6 max-w-6xl mx-auto">
@@ -150,6 +298,21 @@ export default function RecentPanel({ onNavigate }: Props) {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Group by project toggle / 按项目分组切换 */}
+            <button
+              onClick={() => setGroupByProject(g => !g)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] font-semibold transition-all"
+              style={{
+                border: '1px solid var(--border-default)',
+                background: groupByProject ? 'var(--accent-muted)' : 'transparent',
+                color: groupByProject ? 'var(--accent)' : 'var(--txt-3)',
+              }}
+              title={t('recent.group_by_project')}
+            >
+              <Layers size={14} />
+              {t('recent.group_by_project')}
+            </button>
+
             {/* View mode toggle / 视图切换 */}
             <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border-default)' }}>
               <button
@@ -245,137 +408,99 @@ export default function RecentPanel({ onNavigate }: Props) {
         )}
 
         {/* Board view / 看板视图 */}
-        {viewMode === 'board' && sortedSessions.length > 0 && (
+        {viewMode === 'board' && sortedSessions.length > 0 && !groupByProject && (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {sortedSessions.map((session) => (
-              <div
-                key={`${session.projectPath}/${session.id}`}
-                onClick={() => onNavigate(session.projectPath, session.id)}
-                className="group card p-5 cursor-pointer hover:translate-y-[-2px] animate-fade-in flex flex-col"
-              >
-                {/* Top: status + project / 顶部：状态 + 项目 */}
-                <div className="flex items-center justify-between gap-2 mb-3">
-                  <StatusBadge status={session.status} />
-                  <span
-                    className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md truncate max-w-[140px]"
-                    style={{ background: 'var(--surface-2)', color: 'var(--accent)' }}
-                    title={session.projectName}
-                  >
-                    <FolderOpen size={10} className="flex-shrink-0" />
-                    <span className="truncate">{session.projectName}</span>
-                  </span>
-                </div>
-
-                {/* Title / 标题 */}
-                <p
-                  className="text-[14px] font-semibold leading-snug mb-3 line-clamp-2 group-hover:text-[color:var(--accent)] transition-colors"
-                  style={{ color: 'var(--txt-1)', letterSpacing: '-0.012em' }}
-                >
-                  {session.summary || session.id}
-                </p>
-
-                {/* Meta row / 元数据行 */}
-                <div className="flex items-center gap-3 mt-auto flex-wrap">
-                  <span className="inline-flex items-center gap-1 text-[11px] font-medium" style={{ color: 'var(--txt-3)' }}>
-                    <Clock size={11} />
-                    {formatTime(session.lastTimestamp)}
-                  </span>
-                  <span className="inline-flex items-center gap-1 text-[11px] font-medium" style={{ color: 'var(--txt-3)' }}>
-                    <MessageSquare size={11} />
-                    {session.messageCount}
-                  </span>
-                  {session.gitBranch && (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-medium truncate max-w-[100px]" style={{ color: 'var(--txt-3)' }} title={session.gitBranch}>
-                      <GitBranch size={11} className="flex-shrink-0" />
-                      <span className="truncate">{session.gitBranch}</span>
-                    </span>
-                  )}
-                  {session.isAgent && (
-                    <span className="badge badge-tool !text-[10px] !px-1.5 !py-0">
-                      <Bot size={10} className="mr-0.5" />
-                      Agent
-                    </span>
-                  )}
-                  <span
-                    className="text-[11px] font-bold px-1.5 py-0.5 rounded ml-auto"
-                    style={{ background: 'var(--surface-2)', color: 'var(--txt-2)', fontFamily: 'JetBrains Mono, monospace' }}
-                  >
-                    {formatTokens(session.totalTokens)}
-                  </span>
-                </div>
-              </div>
+              <BoardCard key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} />
             ))}
           </div>
         )}
 
-        {/* List view / 列表视图 */}
-        {viewMode === 'list' && sortedSessions.length > 0 && (
-          <div className="space-y-3.5">
-            {sortedSessions.map((session) => {
-              const totalTokens = (session.totalTokens.input_tokens || 0) + (session.totalTokens.output_tokens || 0);
-              const tokenPct = Math.round((totalTokens / maxTokens) * 100);
-
+        {/* Board view grouped / 看板视图（按项目分组） */}
+        {viewMode === 'board' && groupedSessions && (
+          <div className="space-y-6">
+            {groupedSessions.map(([projectPath, group]) => {
+              const collapsed = collapsedProjects.has(projectPath);
               return (
-                <div
-                  key={`${session.projectPath}/${session.id}`}
-                  onClick={() => onNavigate(session.projectPath, session.id)}
-                  className="group card p-6 cursor-pointer hover:translate-y-[-2px] animate-fade-in"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <StatusBadge status={session.status} />
-                        <span
-                          className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md"
-                          style={{ background: 'var(--surface-2)', color: 'var(--accent)' }}
-                        >
-                          <FolderOpen size={11} />
-                          {session.projectName}
-                        </span>
-                        {session.isAgent && (
-                          <span className="badge badge-tool">
-                            <Bot size={11} className="mr-1" />
-                            {t('sessions.agent_session')}
-                          </span>
-                        )}
-                      </div>
-                      <p
-                        className="text-[16px] font-semibold truncate leading-snug group-hover:text-[color:var(--accent)] transition-colors"
-                        style={{ color: 'var(--txt-1)', letterSpacing: '-0.012em' }}
-                      >
-                        {session.summary || session.id}
-                      </p>
-
-                      <div className="flex items-center gap-4 mt-3 flex-wrap">
-                        <span className="inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ color: 'var(--txt-3)' }}>
-                          <Clock size={13} />
-                          {formatTime(session.lastTimestamp)}
-                        </span>
-                        <span className="inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ color: 'var(--txt-3)' }}>
-                          <MessageSquare size={13} />
-                          {session.messageCount} {t('sessions.messages')}
-                        </span>
-                        {session.gitBranch && (
-                          <span className="inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ color: 'var(--txt-3)' }}>
-                            <GitBranch size={13} />
-                            {session.gitBranch}
-                          </span>
-                        )}
-                        <span
-                          className="text-[12px] font-bold px-2 py-0.5 rounded-md ml-auto"
-                          style={{ background: 'var(--surface-2)', color: 'var(--txt-2)', fontFamily: 'JetBrains Mono, monospace' }}
-                        >
-                          {formatTokens(session.totalTokens)} tok
-                        </span>
-                      </div>
-
-                      <div className="mt-4">
-                        <div className="token-bar !h-1.5">
-                          <div className="token-bar-fill" style={{ width: `${tokenPct}%` }} />
-                        </div>
-                      </div>
-                    </div>
+                <div key={projectPath}>
+                  <div
+                    className="flex items-center gap-2 mb-4 cursor-pointer select-none group/header"
+                    onClick={() => toggleCollapse(projectPath)}
+                  >
+                    <span
+                      className="p-1.5 rounded-lg transition-all group-hover/header:scale-110"
+                      style={{
+                        background: collapsed ? 'var(--surface-2)' : 'var(--accent-muted)',
+                        color: collapsed ? 'var(--txt-3)' : 'var(--accent)',
+                      }}
+                    >
+                      {collapsed ? <FolderClosed size={16} /> : <FolderOpen size={16} />}
+                    </span>
+                    <h2 className="text-[15px] font-bold" style={{ color: 'var(--txt-1)' }}>{group.projectName}</h2>
+                    <span className="text-[12px] font-medium px-2 py-0.5 rounded-full" style={{ background: 'var(--surface-2)', color: 'var(--txt-3)' }}>
+                      {group.sessions.length}
+                    </span>
+                    <span className="ml-auto transition-transform" style={{ color: 'var(--txt-3)' }}>
+                      {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                    </span>
                   </div>
+                  {!collapsed && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {group.sessions.map((session) => (
+                        <BoardCard key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* List view / 列表视图 */}
+        {viewMode === 'list' && sortedSessions.length > 0 && !groupByProject && (
+          <div className="space-y-3.5">
+            {sortedSessions.map((session) => (
+              <ListRow key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} maxTokens={maxTokens} />
+            ))}
+          </div>
+        )}
+
+        {/* List view grouped / 列表视图（按项目分组） */}
+        {viewMode === 'list' && groupedSessions && (
+          <div className="space-y-6">
+            {groupedSessions.map(([projectPath, group]) => {
+              const collapsed = collapsedProjects.has(projectPath);
+              return (
+                <div key={projectPath}>
+                  <div
+                    className="flex items-center gap-2 mb-4 cursor-pointer select-none group/header"
+                    onClick={() => toggleCollapse(projectPath)}
+                  >
+                    <span
+                      className="p-1.5 rounded-lg transition-all group-hover/header:scale-110"
+                      style={{
+                        background: collapsed ? 'var(--surface-2)' : 'var(--accent-muted)',
+                        color: collapsed ? 'var(--txt-3)' : 'var(--accent)',
+                      }}
+                    >
+                      {collapsed ? <FolderClosed size={16} /> : <FolderOpen size={16} />}
+                    </span>
+                    <h2 className="text-[15px] font-bold" style={{ color: 'var(--txt-1)' }}>{group.projectName}</h2>
+                    <span className="text-[12px] font-medium px-2 py-0.5 rounded-full" style={{ background: 'var(--surface-2)', color: 'var(--txt-3)' }}>
+                      {group.sessions.length}
+                    </span>
+                    <span className="ml-auto transition-transform" style={{ color: 'var(--txt-3)' }}>
+                      {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                    </span>
+                  </div>
+                  {!collapsed && (
+                    <div className="space-y-3.5">
+                      {group.sessions.map((session) => (
+                        <ListRow key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} maxTokens={maxTokens} />
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
