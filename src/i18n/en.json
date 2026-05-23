@@ -109,6 +109,16 @@
     "light_mode": "Light Mode",
     "language": "Language"
   },
+  "wiki": {
+    "title": "Session Wiki",
+    "view_dag": "DAG",
+    "view_cases": "Cases",
+    "view_timeline": "Timeline",
+    "building": "Building knowledge graph…",
+    "no_cases": "No cases detected in this session.",
+    "no_turns": "No turns found.",
+    "open_wiki": "Open Wiki"
+  },
   "recent": {
     "title": "Recent Sessions",
     "refresh": "Refresh",

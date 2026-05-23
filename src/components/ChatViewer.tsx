@@ -12,7 +12,7 @@ import { Virtuoso } from 'react-virtuoso';
 import {
   ArrowLeft, User, Bot, Terminal, AlertTriangle,
   Copy, Check, ChevronDown, ChevronRight, Shield,
-  ArrowDown, Layers, Zap, FileCode, FileEdit, FilePlus, MessageSquare,
+  ArrowDown, Layers, Zap, FileCode, FileEdit, FilePlus, MessageSquare, Network,
 } from 'lucide-react';
 import { sessions as sessionsApi, type ParsedMessage, type ContentBlock } from '../utils/api';
 import { marked } from 'marked';
@@ -26,6 +26,7 @@ interface Props {
   sessionId: string;
   onBack: () => void;
   onViewAudit?: () => void;
+  onViewWiki?: () => void;
   /**
    * Layout calls this with a `${projectId}/${sessionId}` key and a fn that
    * triggers the live-append fetch. Returning the unregister cleanup keeps
@@ -462,7 +463,7 @@ const FileChangeCard = memo(function FileChangeCard({ change }: { change: FileCh
 
 // --- Main component / 主组件 ---
 
-export default function ChatViewer({ projectId, sessionId, onBack, onViewAudit, registerLiveAppend }: Props) {
+export default function ChatViewer({ projectId, sessionId, onBack, onViewAudit, onViewWiki, registerLiveAppend }: Props) {
   const { t } = useTranslation();
   const [messages, setMessages] = useState<ParsedMessage[]>([]);
   const [meta, setMeta] = useState<Record<string, unknown> | null>(null);
@@ -665,6 +666,13 @@ export default function ChatViewer({ projectId, sessionId, onBack, onViewAudit, 
         >
           <Shield size={16} />
           {t('sessions.view_commands')}
+        </button>
+        <button
+          onClick={() => onViewWiki?.()}
+          className="btn btn-ghost !text-[13px] !font-semibold"
+        >
+          <Network size={16} />
+          {t('wiki.open_wiki')}
         </button>
       </div>
 

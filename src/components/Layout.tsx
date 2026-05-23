@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next';
 import {
   FolderTree, Search, Shield, BarChart3, Trash2, LogOut,
   Sun, Moon, ChevronLeft, Menu, WifiOff, Clock,
-  TrendingUp, Activity, Database,
+  TrendingUp, Activity, Database, Network,
 } from 'lucide-react';
 import { projects as projectsApi, invalidateEtagCache, type ProjectInfo, type SessionMeta } from '../utils/api';
 import { useSSE } from '../hooks/useSSE';
@@ -23,6 +23,7 @@ const SearchPanel = lazy(() => import('./SearchPanel'));
 const AuditPanel = lazy(() => import('./AuditPanel'));
 const TrashPanel = lazy(() => import('./TrashPanel'));
 const RecentPanel = lazy(() => import('./RecentPanel'));
+const WikiPanel = lazy(() => import('./WikiPanel'));
 
 function PanelFallback() {
   return (
@@ -32,7 +33,7 @@ function PanelFallback() {
   );
 }
 
-type View = 'projects' | 'recent' | 'search' | 'audit' | 'trash' | 'stats';
+type View = 'projects' | 'recent' | 'search' | 'audit' | 'trash' | 'stats' | 'wiki';
 
 interface LayoutProps {
   onLogout: () => void;
@@ -173,6 +174,7 @@ export default function Layout({ onLogout }: LayoutProps) {
     { id: 'projects', icon: <FolderTree size={20} />, label: t('nav.projects') },
     { id: 'search', icon: <Search size={20} />, label: t('nav.search') },
     { id: 'audit', icon: <Shield size={20} />, label: t('nav.audit') },
+    { id: 'wiki', icon: <Network size={20} />, label: t('wiki.title') },
     { id: 'trash', icon: <Trash2 size={20} />, label: t('trash.title') },
     { id: 'stats', icon: <BarChart3 size={20} />, label: t('nav.stats') },
   ];
@@ -313,6 +315,7 @@ export default function Layout({ onLogout }: LayoutProps) {
                 sessionId={selectedSession.sessionId}
                 onBack={() => setSelectedSession(null)}
                 onViewAudit={() => setView('audit')}
+                onViewWiki={() => setView('wiki')}
                 registerLiveAppend={registerLiveAppend}
               />
             </Suspense>
@@ -343,6 +346,24 @@ export default function Layout({ onLogout }: LayoutProps) {
               <p className="text-sm">{t('audit.title')}</p>
               <p className="text-2xs mt-1" style={{ color: 'var(--txt-3)' }}>
                 Select a session first, then click "View Commands"
+              </p>
+            </div>
+          )}
+          {view === 'wiki' && selectedSession && (
+            <Suspense fallback={<PanelFallback />}>
+              <WikiPanel
+                projectId={selectedSession.projectId}
+                sessionId={selectedSession.sessionId}
+                onBack={() => setView('projects')}
+              />
+            </Suspense>
+          )}
+          {view === 'wiki' && !selectedSession && (
+            <div className="empty-state h-full">
+              <div className="empty-state-icon"><Network size={28} /></div>
+              <p className="text-sm">{t('wiki.title')}</p>
+              <p className="text-2xs mt-1" style={{ color: 'var(--txt-3)' }}>
+                Select a session first, then click "Open Wiki"
               </p>
             </div>
           )}

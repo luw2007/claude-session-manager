@@ -109,6 +109,16 @@
     "light_mode": "亮色模式",
     "language": "语言"
   },
+  "wiki": {
+    "title": "会话 Wiki",
+    "view_dag": "DAG",
+    "view_cases": "案例",
+    "view_timeline": "时间线",
+    "building": "正在构建知识图谱…",
+    "no_cases": "此会话中未检测到案例。",
+    "no_turns": "未找到轮次。",
+    "open_wiki": "打开 Wiki"
+  },
   "recent": {
     "title": "最近会话",
     "refresh": "刷新",
