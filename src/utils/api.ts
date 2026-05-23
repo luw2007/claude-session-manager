@@ -214,6 +214,12 @@ export interface RecentSession extends SessionMeta {
 export const recent = {
   list: (hours = 24, signal?: AbortSignal) =>
     request<{ sessions: RecentSession[] }>(`/recent?hours=${hours}`, { signal }),
+  updateStatus: (projectPath: string, sessionId: string, status: SessionStatus) =>
+    request<{ ok: boolean }>('/recent/status', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectPath, sessionId, status }),
+    }),
 };
 
 export interface SessionPage {
@@ -296,6 +302,30 @@ export const trash = {
 
 export const stats = {
   get: () => request<Record<string, unknown>>('/stats'),
+};
+
+// --- Pins API / 置顶接口 ---
+
+export interface PinEntry {
+  projectId: string;
+  sessionId: string;
+  pinnedAt: string;
+}
+
+export const pins = {
+  list: (signal?: AbortSignal) =>
+    request<{ pins: PinEntry[] }>('/pins', { signal }),
+
+  add: (projectId: string, sessionId: string) =>
+    request<{ success: boolean; pin: PinEntry }>('/pins', {
+      method: 'POST',
+      body: JSON.stringify({ projectId, sessionId }),
+    }),
+
+  remove: (projectId: string, sessionId: string) =>
+    request<{ success: boolean }>(`/pins/${projectId}/${sessionId}`, {
+      method: 'DELETE',
+    }),
 };
 
 // --- Wiki API / Wiki 接口 ---

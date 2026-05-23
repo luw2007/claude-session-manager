@@ -3,6 +3,8 @@
  */
 
 import { Router } from 'express';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { join } from 'path';
 import {
   listProjects,
   listSessions,
@@ -21,6 +23,22 @@ import {
   DEFAULT_MESSAGE_PAGE,
 } from '../services/session-manager.js';
 import { etagFor, handleConditional } from '../utils/etag.js';
+import { config } from '../utils/config.js';
+
+// Status override persistence / 状态覆盖持久化
+type SessionStatus = 'active' | 'idle' | 'ended';
+const STATUS_FILE = join(config.appDataDir, 'status-overrides.json');
+let statusOverrides: Record<string, SessionStatus> = {};
+
+function loadStatusOverrides() {
+  if (existsSync(STATUS_FILE)) {
+    try { statusOverrides = JSON.parse(readFileSync(STATUS_FILE, 'utf-8')); } catch { statusOverrides = {}; }
+  }
+}
+function saveStatusOverrides() {
+  writeFileSync(STATUS_FILE, JSON.stringify(statusOverrides, null, 2));
+}
+loadStatusOverrides();
 
 const router = Router();
 
@@ -171,22 +189,41 @@ router.delete('/trash', (_req, res) => {
 });
 
 // GET /api/v1/recent - Recent sessions across all projects / 跨项目最近会话
-const ALLOWED_HOURS = new Set([3, 6, 12, 24, 168, 720]);
+const ALLOWED_HOURS = new Set([0.5, 1, 3, 6, 12, 24, 168, 720]);
 router.get('/recent', async (req, res) => {
   try {
-    const raw = parseInt(req.query['hours'] as string, 10) || 24;
+    const raw = parseFloat(req.query['hours'] as string) || 24;
     const hours = ALLOWED_HOURS.has(raw) ? raw : 24;
     const items = await listRecentSessions(hours);
     const now = Date.now();
     const sessions = items.map(({ meta, mtimeMs }) => {
+      const key = `${meta.projectPath}/${meta.id}`;
+      const override = statusOverrides[key];
+      if (override) return { ...meta, status: override };
       const age = now - mtimeMs;
-      const status = age < 5 * 60_000 ? 'active' : age < 3600_000 ? 'idle' : 'ended';
+      const status: SessionStatus = age < 5 * 60_000 ? 'active' : age < 3600_000 ? 'idle' : 'ended';
       return { ...meta, status };
     });
     res.json({ sessions });
   } catch (err) {
     res.status(500).json({ error: `Failed to list recent sessions: ${err}` });
   }
+});
+
+// PATCH /api/v1/recent/status - Update session status override / 更新会话状态覆盖
+const VALID_STATUSES = new Set<SessionStatus>(['active', 'idle', 'ended']);
+router.patch('/recent/status', (req, res) => {
+  const { projectPath, sessionId, status } = req.body;
+  if (!projectPath || !sessionId || !status) {
+    return res.status(400).json({ error: 'projectPath, sessionId, status required' });
+  }
+  if (!VALID_STATUSES.has(status)) {
+    return res.status(400).json({ error: `Invalid status: ${status}` });
+  }
+  const key = `${projectPath}/${sessionId}`;
+  statusOverrides[key] = status;
+  saveStatusOverrides();
+  res.json({ ok: true });
 });
 
 // GET /api/v1/stats - Global statistics / 全局统计

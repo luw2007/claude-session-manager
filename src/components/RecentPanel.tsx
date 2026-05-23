@@ -4,13 +4,14 @@
  * 跨项目查看，支持列表和看板两种视图
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Clock, MessageSquare, GitBranch, Bot, RefreshCw,
-  FolderOpen, FolderClosed, List, LayoutGrid, Layers, ChevronDown, ChevronRight,
+  FolderOpen, FolderClosed, List, LayoutGrid, Columns, Layers, ChevronDown, ChevronRight,
+  Pin, PinOff,
 } from 'lucide-react';
-import { recent as recentApi, type RecentSession, type SessionStatus } from '../utils/api';
+import { recent as recentApi, pins as pinsApi, type RecentSession, type SessionStatus } from '../utils/api';
 
 interface Props {
   onNavigate: (projectId: string, sessionId: string) => void;
@@ -27,7 +28,7 @@ const RANGES: { hours: number; labelKey: string }[] = [
   { hours: 720, labelKey: 'recent.range_30d' },
 ];
 
-type ViewMode = 'list' | 'board';
+type ViewMode = 'list' | 'board' | 'kanban';
 
 const STATUS_ORDER: Record<SessionStatus, number> = { active: 0, idle: 1, ended: 2 };
 
@@ -75,13 +76,26 @@ function StatusBadge({ status }: { status: SessionStatus }) {
   );
 }
 
-function BoardCard({ session, onNavigate }: { session: RecentSession; onNavigate: Props['onNavigate'] }) {
+function BoardCard({ session, onNavigate, pinned, onTogglePin }: { session: RecentSession; onNavigate: Props['onNavigate']; pinned: boolean; onTogglePin: (projectId: string, sessionId: string) => void }) {
   return (
     <div
       onClick={() => onNavigate(session.projectPath, session.id)}
-      className="group card p-5 cursor-pointer hover:translate-y-[-2px] animate-fade-in flex flex-col"
+      className="group card p-5 cursor-pointer hover:translate-y-[-2px] animate-fade-in flex flex-col relative"
     >
-      <div className="flex items-center justify-between gap-2 mb-3">
+      <button
+        onClick={(e) => { e.stopPropagation(); onTogglePin(session.projectPath, session.id); }}
+        className="absolute top-3 right-3 p-1.5 rounded-lg transition-all hover:scale-110"
+        style={{
+          background: pinned ? 'var(--accent-muted)' : 'var(--surface-2)',
+          color: pinned ? 'var(--accent)' : 'var(--txt-3)',
+          opacity: pinned ? 1 : 0,
+        }}
+        title={pinned ? 'Unpin' : 'Pin'}
+        data-pin-btn
+      >
+        {pinned ? <PinOff size={13} /> : <Pin size={13} />}
+      </button>
+      <div className="flex items-center justify-between gap-2 mb-3 pr-7">
         <StatusBadge status={session.status} />
         <span
           className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md truncate max-w-[140px]"
@@ -130,7 +144,7 @@ function BoardCard({ session, onNavigate }: { session: RecentSession; onNavigate
   );
 }
 
-function ListRow({ session, onNavigate, maxTokens }: { session: RecentSession; onNavigate: Props['onNavigate']; maxTokens: number }) {
+function ListRow({ session, onNavigate, maxTokens, pinned, onTogglePin }: { session: RecentSession; onNavigate: Props['onNavigate']; maxTokens: number; pinned: boolean; onTogglePin: (projectId: string, sessionId: string) => void }) {
   const { t } = useTranslation();
   const totalTokens = (session.totalTokens.input_tokens || 0) + (session.totalTokens.output_tokens || 0);
   const tokenPct = Math.round((totalTokens / maxTokens) * 100);
@@ -138,9 +152,22 @@ function ListRow({ session, onNavigate, maxTokens }: { session: RecentSession; o
   return (
     <div
       onClick={() => onNavigate(session.projectPath, session.id)}
-      className="group card p-6 cursor-pointer hover:translate-y-[-2px] animate-fade-in"
+      className="group card p-6 cursor-pointer hover:translate-y-[-2px] animate-fade-in relative"
     >
-      <div className="flex items-start justify-between gap-4">
+      <button
+        onClick={(e) => { e.stopPropagation(); onTogglePin(session.projectPath, session.id); }}
+        className="absolute top-4 right-4 p-1.5 rounded-lg transition-all hover:scale-110"
+        style={{
+          background: pinned ? 'var(--accent-muted)' : 'var(--surface-2)',
+          color: pinned ? 'var(--accent)' : 'var(--txt-3)',
+          opacity: pinned ? 1 : 0,
+        }}
+        title={pinned ? 'Unpin' : 'Pin'}
+        data-pin-btn
+      >
+        {pinned ? <PinOff size={14} /> : <Pin size={14} />}
+      </button>
+      <div className="flex items-start justify-between gap-4 pr-8">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2 flex-wrap">
             <StatusBadge status={session.status} />
@@ -197,6 +224,177 @@ function ListRow({ session, onNavigate, maxTokens }: { session: RecentSession; o
   );
 }
 
+function KanbanCard({ session, onNavigate, onDragStart }: { session: RecentSession; onNavigate: Props['onNavigate']; onDragStart: (session: RecentSession) => void }) {
+  return (
+    <div
+      draggable
+      onDragStart={(e) => {
+        onDragStart(session);
+        e.dataTransfer.effectAllowed = 'move';
+        (e.currentTarget as HTMLElement).style.opacity = '0.4';
+      }}
+      onDragEnd={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
+      onClick={() => onNavigate(session.projectPath, session.id)}
+      className="group card p-4 cursor-grab active:cursor-grabbing hover:translate-y-[-1px] animate-fade-in flex flex-col"
+    >
+      <p
+        className="text-[13px] font-semibold leading-snug mb-2 line-clamp-2 group-hover:text-[color:var(--accent)] transition-colors"
+        style={{ color: 'var(--txt-1)', letterSpacing: '-0.01em' }}
+      >
+        {session.summary || session.id}
+      </p>
+      <div className="flex items-center gap-2 mt-auto flex-wrap">
+        <span
+          className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md truncate max-w-[100px]"
+          style={{ background: 'var(--surface-2)', color: 'var(--accent)' }}
+          title={session.projectName}
+        >
+          <FolderOpen size={9} className="flex-shrink-0" />
+          <span className="truncate">{session.projectName}</span>
+        </span>
+        <span className="inline-flex items-center gap-1 text-[10px] font-medium" style={{ color: 'var(--txt-3)' }}>
+          <Clock size={10} />
+          {formatTime(session.lastTimestamp)}
+        </span>
+        {session.isAgent && (
+          <span className="badge badge-tool !text-[9px] !px-1 !py-0">
+            <Bot size={9} />
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function KanbanColumn({ status, sessions, onNavigate, onDrop, onDragStart, dragOver, onDragEnter, onDragLeave, groupByProject }: {
+  status: SessionStatus;
+  sessions: RecentSession[];
+  onNavigate: Props['onNavigate'];
+  onDrop: (status: SessionStatus) => void;
+  onDragStart: (session: RecentSession) => void;
+  dragOver: boolean;
+  onDragEnter: (status: SessionStatus) => void;
+  onDragLeave: () => void;
+  groupByProject: boolean;
+}) {
+  const { t } = useTranslation();
+  const style = STATUS_STYLES[status];
+  const enterCount = useRef(0);
+
+  const grouped = useMemo(() => {
+    if (!groupByProject) return null;
+    const groups = new Map<string, { projectName: string; sessions: RecentSession[] }>();
+    for (const s of sessions) {
+      const key = s.baseProjectName || s.projectName;
+      if (!groups.has(key)) groups.set(key, { projectName: key, sessions: [] });
+      groups.get(key)!.sessions.push(s);
+    }
+    return [...groups.entries()];
+  }, [sessions, groupByProject]);
+
+  return (
+    <div
+      className="flex-1 min-w-[280px] flex flex-col rounded-xl transition-all"
+      style={{
+        background: dragOver ? style.bg : 'var(--surface-1)',
+        border: `1.5px ${dragOver ? 'dashed' : 'solid'} ${dragOver ? style.dot : 'var(--border-default)'}`,
+      }}
+      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+      onDragEnter={(e) => { e.preventDefault(); enterCount.current++; onDragEnter(status); }}
+      onDragLeave={() => { enterCount.current--; if (enterCount.current <= 0) { enterCount.current = 0; onDragLeave(); } }}
+      onDrop={(e) => { e.preventDefault(); enterCount.current = 0; onDrop(status); }}
+    >
+      <div className="flex items-center gap-2 p-4 pb-2">
+        <span
+          className={`w-[8px] h-[8px] rounded-full flex-shrink-0 ${status === 'active' ? 'animate-pulse' : ''}`}
+          style={{ background: style.dot }}
+        />
+        <span className="text-[13px] font-bold" style={{ color: style.text }}>
+          {t(`recent.status_${status}`)}
+        </span>
+        <span
+          className="text-[11px] font-bold px-1.5 py-0.5 rounded-full ml-auto"
+          style={{ background: style.bg, color: style.text }}
+        >
+          {sessions.length}
+        </span>
+      </div>
+      <div className="flex-1 overflow-y-auto p-3 pt-1 space-y-2.5 max-h-[calc(100vh-360px)]">
+        {!groupByProject && sessions.map((session) => (
+          <KanbanCard key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} onDragStart={onDragStart} />
+        ))}
+        {grouped && grouped.map(([key, group]) => (
+          <div key={key}>
+            <div className="flex items-center gap-1.5 mb-1.5 mt-2 first:mt-0">
+              <FolderOpen size={10} style={{ color: 'var(--accent)' }} />
+              <span className="text-[10px] font-bold truncate" style={{ color: 'var(--txt-2)' }}>{group.projectName}</span>
+              <span className="text-[9px] font-medium px-1 rounded" style={{ background: 'var(--surface-2)', color: 'var(--txt-3)' }}>{group.sessions.length}</span>
+            </div>
+            {group.sessions.map((session) => (
+              <KanbanCard key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} onDragStart={onDragStart} />
+            ))}
+          </div>
+        ))}
+        {sessions.length === 0 && (
+          <div className="text-center py-8 text-[12px]" style={{ color: 'var(--txt-3)' }}>
+            {t('recent.kanban_empty')}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function KanbanBoard({ sessions, onNavigate, onStatusChange, groupByProject }: {
+  sessions: RecentSession[];
+  onNavigate: Props['onNavigate'];
+  onStatusChange: (projectPath: string, sessionId: string, status: SessionStatus) => void;
+  groupByProject: boolean;
+}) {
+  const [dragOverCol, setDragOverCol] = useState<SessionStatus | null>(null);
+  const draggedRef = useRef<RecentSession | null>(null);
+
+  const columns = useMemo(() => {
+    const cols: Record<SessionStatus, RecentSession[]> = { active: [], idle: [], ended: [] };
+    for (const s of sessions) cols[s.status].push(s);
+    return cols;
+  }, [sessions]);
+
+  const handleDragStart = useCallback((session: RecentSession) => {
+    draggedRef.current = session;
+  }, []);
+
+  const handleDrop = useCallback((targetStatus: SessionStatus) => {
+    const dragged = draggedRef.current;
+    if (dragged && dragged.status !== targetStatus) {
+      onStatusChange(dragged.projectPath, dragged.id, targetStatus);
+    }
+    draggedRef.current = null;
+    setDragOverCol(null);
+  }, [onStatusChange]);
+
+  return (
+    <div className="flex gap-4 overflow-x-auto pb-2">
+      {(['active', 'idle', 'ended'] as SessionStatus[]).map((status) => (
+        <KanbanColumn
+          key={status}
+          status={status}
+          sessions={columns[status]}
+          onNavigate={onNavigate}
+          onDragStart={handleDragStart}
+          dragOver={dragOverCol === status}
+          onDragEnter={(s) => setDragOverCol(s)}
+          onDragLeave={() => setDragOverCol(null)}
+          onDrop={handleDrop}
+          groupByProject={groupByProject}
+        />
+      ))}
+    </div>
+  );
+}
+
+const makePinKey = (projectId: string, sessionId: string) => `${projectId}/${sessionId}`;
+
 export default function RecentPanel({ onNavigate }: Props) {
   const { t } = useTranslation();
   const [sessions, setSessions] = useState<RecentSession[]>([]);
@@ -207,6 +405,35 @@ export default function RecentPanel({ onNavigate }: Props) {
   const [statusFilter, setStatusFilter] = useState<SessionStatus | 'all'>('all');
   const [groupByProject, setGroupByProject] = useState(false);
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
+  const [pinnedSet, setPinnedSet] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    pinsApi.list().then(({ pins }) => {
+      setPinnedSet(new Set(pins.map(p => makePinKey(p.projectId, p.sessionId))));
+    }).catch(() => { /* ignore */ });
+  }, []);
+
+  const handleTogglePin = useCallback(async (projectId: string, sessionId: string) => {
+    const key = makePinKey(projectId, sessionId);
+    const wasPinned = pinnedSet.has(key);
+    // Optimistic update / 乐观更新
+    setPinnedSet(prev => {
+      const n = new Set(prev);
+      if (wasPinned) n.delete(key); else n.add(key);
+      return n;
+    });
+    try {
+      if (wasPinned) await pinsApi.remove(projectId, sessionId);
+      else await pinsApi.add(projectId, sessionId);
+    } catch {
+      // Revert on failure / 失败回滚
+      setPinnedSet(prev => {
+        const n = new Set(prev);
+        if (wasPinned) n.add(key); else n.delete(key);
+        return n;
+      });
+    }
+  }, [pinnedSet]);
 
   const toggleCollapse = useCallback((projectPath: string) => {
     setCollapsedProjects(prev => {
@@ -241,6 +468,13 @@ export default function RecentPanel({ onNavigate }: Props) {
     load(hours).finally(() => setTimeout(() => setSpinning(false), 600));
   };
 
+  const handleStatusChange = useCallback(async (projectPath: string, sessionId: string, status: SessionStatus) => {
+    setSessions(prev => prev.map(s =>
+      s.projectPath === projectPath && s.id === sessionId ? { ...s, status } : s
+    ));
+    await recentApi.updateStatus(projectPath, sessionId, status).catch(console.error);
+  }, []);
+
   const sortedSessions = useMemo(() => {
     const filtered = statusFilter === 'all' ? sessions : sessions.filter(s => s.status === statusFilter);
     return [...filtered].sort((a, b) => {
@@ -259,10 +493,29 @@ export default function RecentPanel({ onNavigate }: Props) {
     return max;
   }, [sessions]);
 
+  // Pinned sessions are pulled out of every other view and rendered first.
+  // 置顶会话从其他视图剥离，统一在顶部展示
+  const pinnedSessions = useMemo(() => {
+    if (pinnedSet.size === 0) return [];
+    return sessions
+      .filter(s => pinnedSet.has(makePinKey(s.projectPath, s.id)))
+      .sort((a, b) => b.lastTimestamp.localeCompare(a.lastTimestamp));
+  }, [sessions, pinnedSet]);
+
+  const unpinnedSorted = useMemo(
+    () => sortedSessions.filter(s => !pinnedSet.has(makePinKey(s.projectPath, s.id))),
+    [sortedSessions, pinnedSet],
+  );
+
+  const unpinnedKanbanSessions = useMemo(
+    () => sessions.filter(s => !pinnedSet.has(makePinKey(s.projectPath, s.id))),
+    [sessions, pinnedSet],
+  );
+
   const groupedSessions = useMemo(() => {
     if (!groupByProject) return null;
     const groups = new Map<string, { projectName: string; sessions: RecentSession[] }>();
-    for (const s of sortedSessions) {
+    for (const s of unpinnedSorted) {
       const key = s.baseProjectName || s.projectName;
       if (!groups.has(key)) groups.set(key, { projectName: key, sessions: [] });
       groups.get(key)!.sessions.push(s);
@@ -272,7 +525,7 @@ export default function RecentPanel({ onNavigate }: Props) {
       const bLatest = b[1].sessions[0]?.lastTimestamp || '';
       return bLatest.localeCompare(aLatest);
     });
-  }, [sortedSessions, groupByProject]);
+  }, [unpinnedSorted, groupByProject]);
 
   return (
     <div className="h-full overflow-y-auto">
@@ -338,6 +591,17 @@ export default function RecentPanel({ onNavigate }: Props) {
                 title={t('recent.view_board')}
               >
                 <LayoutGrid size={16} />
+              </button>
+              <button
+                onClick={() => setViewMode('kanban')}
+                className="p-2 transition-colors"
+                style={{
+                  background: viewMode === 'kanban' ? 'var(--accent-muted)' : 'transparent',
+                  color: viewMode === 'kanban' ? 'var(--accent)' : 'var(--txt-3)',
+                }}
+                title={t('recent.view_kanban')}
+              >
+                <Columns size={16} />
               </button>
             </div>
 
@@ -409,16 +673,48 @@ export default function RecentPanel({ onNavigate }: Props) {
           </div>
         )}
 
-        {/* Board view / 看板视图 */}
-        {viewMode === 'board' && sortedSessions.length > 0 && !groupByProject && (
+        {/* Pinned section — always at top, regardless of viewMode/groupByProject */}
+        {/* 置顶区域 — 总是显示在顶部，与视图模式和分组无关 */}
+        {pinnedSessions.length > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center gap-2 mb-4">
+              <Pin size={15} style={{ color: 'var(--accent)' }} />
+              <h2 className="text-[14px] font-bold" style={{ color: 'var(--accent)' }}>{t('recent.pinned')}</h2>
+              <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'var(--accent-muted)', color: 'var(--accent)' }}>
+                {pinnedSessions.length}
+              </span>
+            </div>
+            {viewMode === 'list' ? (
+              <div className="space-y-3.5">
+                {pinnedSessions.map((session) => (
+                  <ListRow key={`pin-${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} maxTokens={maxTokens} pinned={true} onTogglePin={handleTogglePin} />
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {pinnedSessions.map((session) => (
+                  <BoardCard key={`pin-${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} pinned={true} onTogglePin={handleTogglePin} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Kanban view / 看板视图 */}
+        {viewMode === 'kanban' && sessions.length > 0 && (
+          <KanbanBoard sessions={unpinnedKanbanSessions} onNavigate={onNavigate} onStatusChange={handleStatusChange} groupByProject={groupByProject} />
+        )}
+
+        {/* Board view / 卡片视图 */}
+        {viewMode === 'board' && unpinnedSorted.length > 0 && !groupByProject && (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {sortedSessions.map((session) => (
-              <BoardCard key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} />
+            {unpinnedSorted.map((session) => (
+              <BoardCard key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} pinned={false} onTogglePin={handleTogglePin} />
             ))}
           </div>
         )}
 
-        {/* Board view grouped / 看板视图（按项目分组） */}
+        {/* Board view grouped / 卡片视图（按项目分组） */}
         {viewMode === 'board' && groupedSessions && (
           <div className="space-y-6">
             {groupedSessions.map(([projectPath, group]) => {
@@ -449,7 +745,7 @@ export default function RecentPanel({ onNavigate }: Props) {
                   {!collapsed && (
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                       {group.sessions.map((session) => (
-                        <BoardCard key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} />
+                        <BoardCard key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} pinned={false} onTogglePin={handleTogglePin} />
                       ))}
                     </div>
                   )}
@@ -460,10 +756,10 @@ export default function RecentPanel({ onNavigate }: Props) {
         )}
 
         {/* List view / 列表视图 */}
-        {viewMode === 'list' && sortedSessions.length > 0 && !groupByProject && (
+        {viewMode === 'list' && unpinnedSorted.length > 0 && !groupByProject && (
           <div className="space-y-3.5">
-            {sortedSessions.map((session) => (
-              <ListRow key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} maxTokens={maxTokens} />
+            {unpinnedSorted.map((session) => (
+              <ListRow key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} maxTokens={maxTokens} pinned={false} onTogglePin={handleTogglePin} />
             ))}
           </div>
         )}
@@ -499,7 +795,7 @@ export default function RecentPanel({ onNavigate }: Props) {
                   {!collapsed && (
                     <div className="space-y-3.5">
                       {group.sessions.map((session) => (
-                        <ListRow key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} maxTokens={maxTokens} />
+                        <ListRow key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} maxTokens={maxTokens} pinned={false} onTogglePin={handleTogglePin} />
                       ))}
                     </div>
                   )}
