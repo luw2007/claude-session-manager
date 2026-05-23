@@ -368,7 +368,10 @@ function KanbanBoard({ sessions, onNavigate, onStatusChange, groupByProject }: {
   const [collapsedRows, setCollapsedRows] = useState<Set<string>>(new Set());
   const [savedCollapsed, setSavedCollapsed] = useState<Set<string> | null>(null);
   const [bulkState, setBulkState] = useState<'custom' | 'expanded' | 'collapsed'>('custom');
+  const [currentProject, setCurrentProject] = useState<string | null>(null);
   const draggedRef = useRef<RecentSession | null>(null);
+  const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const headerRef = useRef<HTMLDivElement>(null);
 
   const columns = useMemo(() => {
     const cols: Record<SessionStatus, RecentSession[]> = { active: [], idle: [], ended: [] };
@@ -420,22 +423,42 @@ function KanbanBoard({ sessions, onNavigate, onStatusChange, groupByProject }: {
     const allKeys = projectRows.map(([k]) => k);
     setBulkState(curr => {
       if (curr === 'custom') {
-        // custom → expanded (snapshot first)
+        // custom → collapse all [v]
         setSavedCollapsed(new Set(collapsedRows));
-        setCollapsedRows(new Set());
-        return 'expanded';
-      }
-      if (curr === 'expanded') {
-        // expanded → collapsed
         setCollapsedRows(new Set(allKeys));
         return 'collapsed';
       }
-      // collapsed → custom (restore)
+      if (curr === 'collapsed') {
+        // collapsed → expand all [ ]
+        setCollapsedRows(new Set());
+        return 'expanded';
+      }
+      // expanded → restore [-]
       setCollapsedRows(savedCollapsed ?? new Set());
       setSavedCollapsed(null);
       return 'custom';
     });
   }, [projectRows, collapsedRows, savedCollapsed]);
+
+  useEffect(() => {
+    if (!groupByProject || !projectRows) { setCurrentProject(null); return; }
+    const scrollParent = headerRef.current?.closest('.overflow-y-auto');
+    if (!scrollParent) return;
+    const handleScroll = () => {
+      const headerBottom = headerRef.current?.getBoundingClientRect().bottom ?? 0;
+      let found: string | null = null;
+      for (const [key] of projectRows) {
+        const el = rowRefs.current.get(key);
+        if (!el) continue;
+        const rect = el.getBoundingClientRect();
+        if (rect.top <= headerBottom + 8) found = key;
+      }
+      setCurrentProject(found);
+    };
+    scrollParent.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => scrollParent.removeEventListener('scroll', handleScroll);
+  }, [groupByProject, projectRows]);
 
   const STATUSES: SessionStatus[] = ['active', 'idle', 'ended'];
 
@@ -444,6 +467,7 @@ function KanbanBoard({ sessions, onNavigate, onStatusChange, groupByProject }: {
       <div>
         {/* Header row — sticky / 表头行 — 吸顶 */}
         <div
+          ref={headerRef}
           className="grid grid-cols-[180px_1fr_1fr_1fr] gap-3 mb-3 sticky top-0 z-10 py-2 -mt-2"
           style={{ background: 'var(--surface-0, var(--bg-main, #fff))' }}
         >
@@ -451,19 +475,21 @@ function KanbanBoard({ sessions, onNavigate, onStatusChange, groupByProject }: {
             <button
               onClick={cycleBulkCollapse}
               className="p-1 rounded hover:scale-110 transition-transform flex-shrink-0"
-              style={{ color: bulkState === 'expanded' ? 'var(--status-ok)' : bulkState === 'collapsed' ? 'var(--txt-3)' : 'var(--accent)' }}
+              style={{ color: bulkState === 'collapsed' ? 'var(--status-ok)' : bulkState === 'expanded' ? 'var(--txt-3)' : 'var(--accent)' }}
               title={
-                bulkState === 'custom' ? t('recent.kanban_expand_all')
-                : bulkState === 'expanded' ? t('recent.kanban_collapse_all')
+                bulkState === 'custom' ? t('recent.kanban_collapse_all')
+                : bulkState === 'collapsed' ? t('recent.kanban_expand_all')
                 : t('recent.kanban_restore')
               }
             >
-              {bulkState === 'expanded' ? <CheckSquare size={14} />
-                : bulkState === 'collapsed' ? <Square size={14} />
+              {bulkState === 'collapsed' ? <CheckSquare size={14} />
+                : bulkState === 'expanded' ? <Square size={14} />
                 : <MinusSquare size={14} />}
             </button>
             <FolderOpen size={13} style={{ color: 'var(--accent)' }} />
-            <span className="text-[12px] font-bold" style={{ color: 'var(--txt-2)' }}>{t('recent.group_by_project')}</span>
+            <span className="text-[12px] font-bold truncate" style={{ color: currentProject ? 'var(--txt-1)' : 'var(--txt-2)' }}>
+              {currentProject || t('recent.group_by_project')}
+            </span>
           </div>
           {STATUSES.map((status) => {
             const style = STATUS_STYLES[status];
@@ -480,10 +506,10 @@ function KanbanBoard({ sessions, onNavigate, onStatusChange, groupByProject }: {
           const collapsed = collapsedRows.has(key);
           const totalCount = Object.values(row.cells).flat().length;
           return (
-            <div key={key} className="mb-3">
+            <div key={key} className="mb-3" ref={(el) => { if (el) rowRefs.current.set(key, el); else rowRefs.current.delete(key); }}>
               <div className="grid grid-cols-[180px_1fr_1fr_1fr] gap-3">
                 <div
-                  className="flex items-center gap-2 pt-2 px-2 min-w-0 cursor-pointer select-none group/row"
+                  className="flex items-start gap-2 pt-2 px-2 min-w-0 cursor-pointer select-none group/row"
                   onClick={() => toggleRow(key)}
                 >
                   <span className="transition-transform" style={{ color: 'var(--txt-3)' }}>
