@@ -31,25 +31,101 @@ export function decodeProjectPath(encoded: string): string {
   return encoded.replace(/^-/, '/').replace(/-/g, '/');
 }
 
+interface WorktreeInfo {
+  baseName: string;
+  worktreeName: string;
+  isOrphan: boolean;
+}
+
+/**
+ * Simple display name (last 2 path segments), no worktree detection.
+ * 简单显示名（路径末两段），不做 worktree 检测
+ */
+function displayNameSimple(encoded: string): string {
+  const decoded = decodeProjectPath(encoded);
+  const parts = decoded.split('/').filter(Boolean);
+  return parts.slice(-2).join('/') || encoded;
+}
+
+/**
+ * Detect worktree from 4 encoded naming patterns + decoded path pattern.
+ * 从编码目录名检测 worktree（4 种编码模式 + 解码路径模式）
+ *
+ * Priority order (most specific first):
+ * 1. --claude-worktrees-<name>  → merge into parent
+ * 2. --worktrees-<name>         → merge into parent
+ * 3. -private-tmp-wt-<name>     → orphan, keep original ID
+ * 4. -wt-<name> (inline)        → merge into prefix
+ * 5. decoded /.claude/worktrees/ → merge into parent (existing fallback)
+ */
+function detectWorktree(encoded: string): WorktreeInfo | null {
+  let idx: number;
+
+  // Pattern 1: --claude-worktrees-<name>
+  idx = encoded.indexOf('--claude-worktrees-');
+  if (idx > 0) {
+    return {
+      baseName: displayNameSimple(encoded.slice(0, idx)),
+      worktreeName: encoded.slice(idx + '--claude-worktrees-'.length),
+      isOrphan: false,
+    };
+  }
+
+  // Pattern 2: --worktrees-<name>
+  idx = encoded.indexOf('--worktrees-');
+  if (idx > 0) {
+    return {
+      baseName: displayNameSimple(encoded.slice(0, idx)),
+      worktreeName: encoded.slice(idx + '--worktrees-'.length),
+      isOrphan: false,
+    };
+  }
+
+  // Pattern 3: -private-tmp-wt-<name> → orphan worktree (must be at start)
+  idx = encoded.indexOf('-private-tmp-wt-');
+  if (idx === 0) {
+    return {
+      baseName: displayNameSimple(encoded),
+      worktreeName: encoded.slice(idx + '-private-tmp-wt-'.length),
+      isOrphan: true,
+    };
+  }
+
+  // Pattern 4: -wt-<name> (inline marker, non-greedy first match)
+  const wtInline = encoded.match(/^(.+?)-wt-(.+)$/);
+  if (wtInline) {
+    return {
+      baseName: displayNameSimple(wtInline[1]),
+      worktreeName: wtInline[2],
+      isOrphan: false,
+    };
+  }
+
+  // Fallback: decoded path contains /.claude/worktrees/
+  const decoded = decodeProjectPath(encoded);
+  const parts = decoded.split('/').filter(Boolean);
+  const wtIdx = parts.indexOf('.claude');
+  if (wtIdx >= 0 && parts[wtIdx + 1] === 'worktrees' && parts[wtIdx + 2]) {
+    return {
+      baseName: parts.slice(0, wtIdx).slice(-2).join('/') || encoded,
+      worktreeName: parts.slice(wtIdx + 2).join('/'),
+      isOrphan: false,
+    };
+  }
+
+  return null;
+}
+
 /**
  * Extract a human-readable project name from encoded path
  * 从编码路径提取人类可读的项目名
  */
 export function getProjectDisplayName(encoded: string): string {
-  const decoded = decodeProjectPath(encoded);
-  const parts = decoded.split('/').filter(Boolean);
-
-  // Detect worktree paths: /.claude/worktrees/<name>
-  // 检测 worktree 路径
-  const wtIdx = parts.indexOf('.claude');
-  if (wtIdx >= 0 && parts[wtIdx + 1] === 'worktrees' && parts[wtIdx + 2]) {
-    const parentParts = parts.slice(0, wtIdx);
-    const parentName = parentParts.slice(-2).join('/') || encoded;
-    const wtName = parts.slice(wtIdx + 2).join('/');
-    return `${parentName} ⌥ ${wtName}`;
+  const wt = detectWorktree(encoded);
+  if (wt && !wt.isOrphan) {
+    return `${wt.baseName} ⌥ ${wt.worktreeName}`;
   }
-
-  return parts.slice(-2).join('/') || encoded;
+  return displayNameSimple(encoded);
 }
 
 /**
@@ -58,16 +134,11 @@ export function getProjectDisplayName(encoded: string): string {
  * 获取基础项目名（去除 worktree 后缀），用于分组
  */
 export function getBaseProjectName(encoded: string): string {
-  const decoded = decodeProjectPath(encoded);
-  const parts = decoded.split('/').filter(Boolean);
-
-  const wtIdx = parts.indexOf('.claude');
-  if (wtIdx >= 0 && parts[wtIdx + 1] === 'worktrees' && parts[wtIdx + 2]) {
-    const parentParts = parts.slice(0, wtIdx);
-    return parentParts.slice(-2).join('/') || encoded;
+  const wt = detectWorktree(encoded);
+  if (wt && !wt.isOrphan) {
+    return wt.baseName;
   }
-
-  return parts.slice(-2).join('/') || encoded;
+  return displayNameSimple(encoded);
 }
 
 /**
