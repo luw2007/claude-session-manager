@@ -813,7 +813,8 @@ export default function RecentPanel({ onNavigate }: Props) {
           ))}
         </div>
 
-        {/* Status filter pills / 状态筛选 */}
+        {/* Status filter pills — hidden in kanban mode / 状态筛选 — 看板模式隐藏 */}
+        {viewMode !== 'kanban' && (
         <div className="flex items-center gap-2 mb-8 flex-wrap">
           {(['all', 'active', 'idle', 'ended'] as const).map((s) => {
             const isActive = statusFilter === s;
@@ -837,6 +838,7 @@ export default function RecentPanel({ onNavigate }: Props) {
             );
           })}
         </div>
+        )}
 
         {/* Loading / 加载中 */}
         {loading && sessions.length === 0 && (
