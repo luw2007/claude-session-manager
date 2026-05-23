@@ -123,6 +123,8 @@
     "title": "Recent Sessions",
     "refresh": "Refresh",
     "no_sessions": "No recent sessions found.",
+    "range_30m": "30m",
+    "range_1h": "1h",
     "range_3h": "3h",
     "range_6h": "6h",
     "range_12h": "12h",

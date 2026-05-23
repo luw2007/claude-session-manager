@@ -123,6 +123,8 @@
     "title": "最近会话",
     "refresh": "刷新",
     "no_sessions": "未找到最近的会话。",
+    "range_30m": "30m",
+    "range_1h": "1h",
     "range_3h": "3h",
     "range_6h": "6h",
     "range_12h": "12h",

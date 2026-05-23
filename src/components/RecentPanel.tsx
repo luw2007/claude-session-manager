@@ -17,6 +17,8 @@ interface Props {
 }
 
 const RANGES: { hours: number; labelKey: string }[] = [
+  { hours: 0.5, labelKey: 'recent.range_30m' },
+  { hours: 1, labelKey: 'recent.range_1h' },
   { hours: 3, labelKey: 'recent.range_3h' },
   { hours: 6, labelKey: 'recent.range_6h' },
   { hours: 12, labelKey: 'recent.range_12h' },
