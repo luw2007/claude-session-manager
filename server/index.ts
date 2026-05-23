@@ -27,6 +27,7 @@ import { buildIndex, loadIndex, reconcile, persistIndex } from './services/searc
 import authRoutes from './routes/auth.js';
 import sessionRoutes from './routes/sessions.js';
 import searchRoutes from './routes/search.js';
+import wikiRoutes from './routes/wiki.js';
 
 const app = express();
 
@@ -89,6 +90,7 @@ app.use('/api/v1/auth', authLimiter, authRoutes);
 // Protected routes / 受保护的路由
 app.use('/api/v1', requireAuth, sessionRoutes);
 app.use('/api/v1', requireAuth, searchRoutes);
+app.use('/api/v1', requireAuth, wikiRoutes);
 
 // SSE endpoint for live updates / SSE 实时更新端点
 app.get('/api/v1/events', requireAuth, (req, res) => {

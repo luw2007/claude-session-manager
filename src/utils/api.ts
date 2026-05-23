@@ -297,3 +297,101 @@ export const trash = {
 export const stats = {
   get: () => request<Record<string, unknown>>('/stats'),
 };
+
+// --- Wiki API / Wiki 接口 ---
+
+export type WikiComponentKind =
+  | 'text' | 'code' | 'code_diff' | 'table' | 'url'
+  | 'file_path' | 'tool_call' | 'tool_result' | 'image';
+
+export interface WikiComponent {
+  kind: WikiComponentKind;
+  title?: string;
+  content: string;
+  language?: string;
+  toolName?: string;
+  filePath?: string;
+  length: number;
+}
+
+export interface WikiSourceLocation {
+  filePath: string;
+  lineNumber: number;
+  messageUuid: string;
+}
+
+export interface DagNode {
+  uri: string;
+  nodeId: string;
+  title: string;
+  summary: string;
+  components: WikiComponent[];
+  rawText: string;
+  turnUri: string;
+  turnIndex: number;
+  role: 'user' | 'assistant';
+  timestamp: string;
+  source: WikiSourceLocation;
+  dependsOn: string[];
+  enables: string[];
+  sessionUri: string;
+  caseUri: string;
+  projectUri: string;
+}
+
+export interface WikiTurn {
+  uri: string;
+  index: number;
+  userUuid: string;
+  assistantUuids: string[];
+  timestamp: string;
+  userText: string;
+  assistantText: string;
+  toolCalls: Array<{ toolName: string; inputSummary: string; isError: boolean }>;
+  nodeUris: string[];
+  source: WikiSourceLocation;
+}
+
+export interface WikiCase {
+  uri: string;
+  index: number;
+  title: string;
+  summary: string;
+  turnUris: string[];
+  nodeUris: string[];
+  startTimestamp: string;
+  endTimestamp: string;
+  sessionUri: string;
+}
+
+export interface WikiGraphResponse {
+  projectId: string;
+  sessionId: string;
+  nodes: DagNode[];
+  turns: WikiTurn[];
+  cases: WikiCase[];
+  edges: Array<{ from: string; to: string; kind: 'turn_sequence' | 'dependency' | 'case_boundary' }>;
+}
+
+export interface WikiNodesResponse {
+  nodes: DagNode[];
+  total: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}
+
+export const wiki = {
+  graph: (projectId: string, sessionId: string, signal?: AbortSignal) =>
+    request<WikiGraphResponse>(`/wiki/${projectId}/${sessionId}/graph`, { signal }),
+
+  nodes: (projectId: string, sessionId: string, opts: { page?: number; limit?: number } = {}) => {
+    const params = new URLSearchParams();
+    if (opts.page != null) params.set('page', String(opts.page));
+    if (opts.limit != null) params.set('limit', String(opts.limit));
+    const qs = params.toString();
+    return request<WikiNodesResponse>(
+      `/wiki/${projectId}/${sessionId}/nodes${qs ? `?${qs}` : ''}`,
+    );
+  },
+};
