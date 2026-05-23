@@ -365,6 +365,7 @@ function KanbanBoard({ sessions, onNavigate, onStatusChange, groupByProject }: {
 }) {
   const { t } = useTranslation();
   const [dragOverCell, setDragOverCell] = useState<string | null>(null);
+  const [collapsedRows, setCollapsedRows] = useState<Set<string>>(new Set());
   const draggedRef = useRef<RecentSession | null>(null);
 
   const columns = useMemo(() => {
@@ -401,14 +402,29 @@ function KanbanBoard({ sessions, onNavigate, onStatusChange, groupByProject }: {
     setDragOverCell(null);
   }, [onStatusChange]);
 
+  const toggleRow = useCallback((key: string) => {
+    setCollapsedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
   const STATUSES: SessionStatus[] = ['active', 'idle', 'ended'];
 
   if (groupByProject && projectRows) {
     return (
       <div className="overflow-x-auto">
-        {/* Header row / 表头行 */}
-        <div className="grid grid-cols-[180px_1fr_1fr_1fr] gap-3 mb-3 sticky top-0">
-          <div />
+        {/* Header row — sticky / 表头行 — 吸顶 */}
+        <div
+          className="grid grid-cols-[180px_1fr_1fr_1fr] gap-3 mb-3 sticky top-0 z-10 py-2 -mt-2"
+          style={{ background: 'var(--surface-0, var(--bg-main, #fff))' }}
+        >
+          <div className="flex items-center gap-2 px-2">
+            <FolderOpen size={13} style={{ color: 'var(--accent)' }} />
+            <span className="text-[12px] font-bold" style={{ color: 'var(--txt-2)' }}>{t('recent.group_by_project')}</span>
+          </div>
           {STATUSES.map((status) => {
             const style = STATUS_STYLES[status];
             return (
@@ -420,27 +436,57 @@ function KanbanBoard({ sessions, onNavigate, onStatusChange, groupByProject }: {
           })}
         </div>
         {/* Project rows / 项目行 */}
-        {projectRows.map(([key, row]) => (
-          <div key={key} className="grid grid-cols-[180px_1fr_1fr_1fr] gap-3 mb-3">
-            <div className="flex items-start gap-2 pt-2 px-2 min-w-0">
-              <FolderOpen size={13} className="flex-shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />
-              <span className="text-[12px] font-bold truncate" style={{ color: 'var(--txt-1)' }} title={row.projectName}>{row.projectName}</span>
+        {projectRows.map(([key, row]) => {
+          const collapsed = collapsedRows.has(key);
+          const totalCount = Object.values(row.cells).flat().length;
+          return (
+            <div key={key} className="mb-3">
+              <div className="grid grid-cols-[180px_1fr_1fr_1fr] gap-3">
+                <div
+                  className="flex items-center gap-2 pt-2 px-2 min-w-0 cursor-pointer select-none group/row"
+                  onClick={() => toggleRow(key)}
+                >
+                  <span className="transition-transform" style={{ color: 'var(--txt-3)' }}>
+                    {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+                  </span>
+                  <span style={{ color: 'var(--accent)' }} className="flex-shrink-0">
+                    {collapsed ? <FolderClosed size={13} /> : <FolderOpen size={13} />}
+                  </span>
+                  <span className="text-[12px] font-bold truncate group-hover/row:text-[color:var(--accent)] transition-colors" style={{ color: 'var(--txt-1)' }} title={row.projectName}>{row.projectName}</span>
+                  <span className="text-[10px] font-medium px-1.5 rounded-full ml-auto" style={{ background: 'var(--surface-2)', color: 'var(--txt-3)' }}>{totalCount}</span>
+                </div>
+                {!collapsed && STATUSES.map((status) => (
+                  <KanbanCell
+                    key={status}
+                    status={status}
+                    sessions={row.cells[status]}
+                    onNavigate={onNavigate}
+                    onDragStart={handleDragStart}
+                    dragOver={dragOverCell === `${key}/${status}`}
+                    onDragEnter={() => setDragOverCell(`${key}/${status}`)}
+                    onDragLeave={() => setDragOverCell(null)}
+                    onDrop={handleDrop}
+                  />
+                ))}
+                {collapsed && (
+                  <div className="col-span-3 flex items-center px-3 py-2 text-[11px]" style={{ color: 'var(--txt-3)' }}>
+                    {STATUSES.map(s => {
+                      const count = row.cells[s].length;
+                      if (!count) return null;
+                      const st = STATUS_STYLES[s];
+                      return (
+                        <span key={s} className="inline-flex items-center gap-1 mr-4">
+                          <span className="w-[6px] h-[6px] rounded-full" style={{ background: st.dot }} />
+                          <span style={{ color: st.text }}>{count}</span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
-            {STATUSES.map((status) => (
-              <KanbanCell
-                key={status}
-                status={status}
-                sessions={row.cells[status]}
-                onNavigate={onNavigate}
-                onDragStart={handleDragStart}
-                dragOver={dragOverCell === `${key}/${status}`}
-                onDragEnter={() => setDragOverCell(`${key}/${status}`)}
-                onDragLeave={() => setDragOverCell(null)}
-                onDrop={handleDrop}
-              />
-            ))}
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   }
@@ -793,7 +839,8 @@ export default function RecentPanel({ onNavigate }: Props) {
               return (
                 <div key={projectPath}>
                   <div
-                    className="flex items-center gap-2 mb-4 cursor-pointer select-none group/header"
+                    className="flex items-center gap-2 mb-4 cursor-pointer select-none group/header sticky top-0 z-10 py-2 -mt-2 rounded-lg px-2"
+                    style={{ background: 'var(--surface-0, var(--bg-main, #fff))' }}
                     onClick={() => toggleCollapse(projectPath)}
                   >
                     <span
@@ -843,7 +890,8 @@ export default function RecentPanel({ onNavigate }: Props) {
               return (
                 <div key={projectPath}>
                   <div
-                    className="flex items-center gap-2 mb-4 cursor-pointer select-none group/header"
+                    className="flex items-center gap-2 mb-4 cursor-pointer select-none group/header sticky top-0 z-10 py-2 -mt-2 rounded-lg px-2"
+                    style={{ background: 'var(--surface-0, var(--bg-main, #fff))' }}
                     onClick={() => toggleCollapse(projectPath)}
                   >
                     <span
