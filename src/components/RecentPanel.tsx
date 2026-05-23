@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next';
 import {
   Clock, MessageSquare, GitBranch, Bot, RefreshCw,
   FolderOpen, FolderClosed, List, LayoutGrid, Columns, Layers, ChevronDown, ChevronRight,
-  Pin, PinOff,
+  Pin, PinOff, CheckSquare, Square, MinusSquare,
 } from 'lucide-react';
 import { recent as recentApi, pins as pinsApi, type RecentSession, type SessionStatus } from '../utils/api';
 
@@ -282,7 +282,7 @@ function KanbanColumn({ status, sessions, onNavigate, onDrop, onDragStart, dragO
 
   return (
     <div
-      className="flex-1 min-w-[280px] flex flex-col rounded-xl transition-all"
+      className="flex-1 min-w-[280px] flex flex-col rounded-xl transition-all h-[calc(100vh-320px)]"
       style={{
         background: dragOver ? style.bg : 'var(--surface-1)',
         border: `1.5px ${dragOver ? 'dashed' : 'solid'} ${dragOver ? style.dot : 'var(--border-default)'}`,
@@ -292,7 +292,7 @@ function KanbanColumn({ status, sessions, onNavigate, onDrop, onDragStart, dragO
       onDragLeave={() => { enterCount.current--; if (enterCount.current <= 0) { enterCount.current = 0; onDragLeave(); } }}
       onDrop={(e) => { e.preventDefault(); enterCount.current = 0; onDrop(status); }}
     >
-      <div className="flex items-center gap-2 p-4 pb-2">
+      <div className="flex items-center gap-2 p-4 pb-2 sticky top-0 z-10 rounded-t-xl" style={{ background: 'inherit' }}>
         <span
           className={`w-[8px] h-[8px] rounded-full flex-shrink-0 ${status === 'active' ? 'animate-pulse' : ''}`}
           style={{ background: style.dot }}
@@ -307,7 +307,7 @@ function KanbanColumn({ status, sessions, onNavigate, onDrop, onDragStart, dragO
           {sessions.length}
         </span>
       </div>
-      <div className="flex-1 overflow-y-auto p-3 pt-1 space-y-2.5 max-h-[calc(100vh-360px)]">
+      <div className="flex-1 overflow-y-auto p-3 pt-1 space-y-2.5">
         {sessions.map((session) => (
           <KanbanCard key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} onDragStart={onDragStart} />
         ))}
@@ -366,6 +366,8 @@ function KanbanBoard({ sessions, onNavigate, onStatusChange, groupByProject }: {
   const { t } = useTranslation();
   const [dragOverCell, setDragOverCell] = useState<string | null>(null);
   const [collapsedRows, setCollapsedRows] = useState<Set<string>>(new Set());
+  const [savedCollapsed, setSavedCollapsed] = useState<Set<string> | null>(null);
+  const [bulkState, setBulkState] = useState<'custom' | 'expanded' | 'collapsed'>('custom');
   const draggedRef = useRef<RecentSession | null>(null);
 
   const columns = useMemo(() => {
@@ -409,19 +411,57 @@ function KanbanBoard({ sessions, onNavigate, onStatusChange, groupByProject }: {
       else next.add(key);
       return next;
     });
+    setBulkState('custom');
+    setSavedCollapsed(null);
   }, []);
+
+  const cycleBulkCollapse = useCallback(() => {
+    if (!projectRows) return;
+    const allKeys = projectRows.map(([k]) => k);
+    setBulkState(curr => {
+      if (curr === 'custom') {
+        // custom → expanded (snapshot first)
+        setSavedCollapsed(new Set(collapsedRows));
+        setCollapsedRows(new Set());
+        return 'expanded';
+      }
+      if (curr === 'expanded') {
+        // expanded → collapsed
+        setCollapsedRows(new Set(allKeys));
+        return 'collapsed';
+      }
+      // collapsed → custom (restore)
+      setCollapsedRows(savedCollapsed ?? new Set());
+      setSavedCollapsed(null);
+      return 'custom';
+    });
+  }, [projectRows, collapsedRows, savedCollapsed]);
 
   const STATUSES: SessionStatus[] = ['active', 'idle', 'ended'];
 
   if (groupByProject && projectRows) {
     return (
-      <div className="overflow-x-auto">
+      <div>
         {/* Header row — sticky / 表头行 — 吸顶 */}
         <div
           className="grid grid-cols-[180px_1fr_1fr_1fr] gap-3 mb-3 sticky top-0 z-10 py-2 -mt-2"
           style={{ background: 'var(--surface-0, var(--bg-main, #fff))' }}
         >
           <div className="flex items-center gap-2 px-2">
+            <button
+              onClick={cycleBulkCollapse}
+              className="p-1 rounded hover:scale-110 transition-transform flex-shrink-0"
+              style={{ color: bulkState === 'expanded' ? 'var(--status-ok)' : bulkState === 'collapsed' ? 'var(--txt-3)' : 'var(--accent)' }}
+              title={
+                bulkState === 'custom' ? t('recent.kanban_expand_all')
+                : bulkState === 'expanded' ? t('recent.kanban_collapse_all')
+                : t('recent.kanban_restore')
+              }
+            >
+              {bulkState === 'expanded' ? <CheckSquare size={14} />
+                : bulkState === 'collapsed' ? <Square size={14} />
+                : <MinusSquare size={14} />}
+            </button>
             <FolderOpen size={13} style={{ color: 'var(--accent)' }} />
             <span className="text-[12px] font-bold" style={{ color: 'var(--txt-2)' }}>{t('recent.group_by_project')}</span>
           </div>
