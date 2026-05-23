@@ -266,7 +266,7 @@ function KanbanCard({ session, onNavigate, onDragStart }: { session: RecentSessi
   );
 }
 
-function KanbanColumn({ status, sessions, onNavigate, onDrop, onDragStart, dragOver, onDragEnter, onDragLeave, groupByProject }: {
+function KanbanColumn({ status, sessions, onNavigate, onDrop, onDragStart, dragOver, onDragEnter, onDragLeave }: {
   status: SessionStatus;
   sessions: RecentSession[];
   onNavigate: Props['onNavigate'];
@@ -275,22 +275,10 @@ function KanbanColumn({ status, sessions, onNavigate, onDrop, onDragStart, dragO
   dragOver: boolean;
   onDragEnter: (status: SessionStatus) => void;
   onDragLeave: () => void;
-  groupByProject: boolean;
 }) {
   const { t } = useTranslation();
   const style = STATUS_STYLES[status];
   const enterCount = useRef(0);
-
-  const grouped = useMemo(() => {
-    if (!groupByProject) return null;
-    const groups = new Map<string, { projectName: string; sessions: RecentSession[] }>();
-    for (const s of sessions) {
-      const key = s.baseProjectName || s.projectName;
-      if (!groups.has(key)) groups.set(key, { projectName: key, sessions: [] });
-      groups.get(key)!.sessions.push(s);
-    }
-    return [...groups.entries()];
-  }, [sessions, groupByProject]);
 
   return (
     <div
@@ -320,20 +308,8 @@ function KanbanColumn({ status, sessions, onNavigate, onDrop, onDragStart, dragO
         </span>
       </div>
       <div className="flex-1 overflow-y-auto p-3 pt-1 space-y-2.5 max-h-[calc(100vh-360px)]">
-        {!groupByProject && sessions.map((session) => (
+        {sessions.map((session) => (
           <KanbanCard key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} onDragStart={onDragStart} />
-        ))}
-        {grouped && grouped.map(([key, group]) => (
-          <div key={key}>
-            <div className="flex items-center gap-1.5 mb-1.5 mt-2 first:mt-0">
-              <FolderOpen size={10} style={{ color: 'var(--accent)' }} />
-              <span className="text-[10px] font-bold truncate" style={{ color: 'var(--txt-2)' }}>{group.projectName}</span>
-              <span className="text-[9px] font-medium px-1 rounded" style={{ background: 'var(--surface-2)', color: 'var(--txt-3)' }}>{group.sessions.length}</span>
-            </div>
-            {group.sessions.map((session) => (
-              <KanbanCard key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} onDragStart={onDragStart} />
-            ))}
-          </div>
         ))}
         {sessions.length === 0 && (
           <div className="text-center py-8 text-[12px]" style={{ color: 'var(--txt-3)' }}>
@@ -345,13 +321,50 @@ function KanbanColumn({ status, sessions, onNavigate, onDrop, onDragStart, dragO
   );
 }
 
+function KanbanCell({ status, sessions, onNavigate, onDragStart, onDrop, dragOver, onDragEnter, onDragLeave }: {
+  status: SessionStatus;
+  sessions: RecentSession[];
+  onNavigate: Props['onNavigate'];
+  onDragStart: (session: RecentSession) => void;
+  onDrop: (status: SessionStatus) => void;
+  dragOver: boolean;
+  onDragEnter: (status: SessionStatus) => void;
+  onDragLeave: () => void;
+}) {
+  const { t } = useTranslation();
+  const style = STATUS_STYLES[status];
+  const enterCount = useRef(0);
+  return (
+    <div
+      className="flex-1 min-w-[200px] rounded-lg p-2 space-y-2 transition-all min-h-[60px]"
+      style={{
+        background: dragOver ? style.bg : 'transparent',
+        border: `1px ${dragOver ? 'dashed' : 'dashed'} ${dragOver ? style.dot : 'var(--border-default)'}`,
+        opacity: dragOver ? 1 : 0.8,
+      }}
+      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+      onDragEnter={(e) => { e.preventDefault(); enterCount.current++; onDragEnter(status); }}
+      onDragLeave={() => { enterCount.current--; if (enterCount.current <= 0) { enterCount.current = 0; onDragLeave(); } }}
+      onDrop={(e) => { e.preventDefault(); enterCount.current = 0; onDrop(status); }}
+    >
+      {sessions.map((session) => (
+        <KanbanCard key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} onDragStart={onDragStart} />
+      ))}
+      {sessions.length === 0 && (
+        <div className="text-center py-3 text-[10px]" style={{ color: 'var(--txt-3)' }}>—</div>
+      )}
+    </div>
+  );
+}
+
 function KanbanBoard({ sessions, onNavigate, onStatusChange, groupByProject }: {
   sessions: RecentSession[];
   onNavigate: Props['onNavigate'];
   onStatusChange: (projectPath: string, sessionId: string, status: SessionStatus) => void;
   groupByProject: boolean;
 }) {
-  const [dragOverCol, setDragOverCol] = useState<SessionStatus | null>(null);
+  const { t } = useTranslation();
+  const [dragOverCell, setDragOverCell] = useState<string | null>(null);
   const draggedRef = useRef<RecentSession | null>(null);
 
   const columns = useMemo(() => {
@@ -359,6 +372,21 @@ function KanbanBoard({ sessions, onNavigate, onStatusChange, groupByProject }: {
     for (const s of sessions) cols[s.status].push(s);
     return cols;
   }, [sessions]);
+
+  const projectRows = useMemo(() => {
+    if (!groupByProject) return null;
+    const groups = new Map<string, { projectName: string; cells: Record<SessionStatus, RecentSession[]> }>();
+    for (const s of sessions) {
+      const key = s.baseProjectName || s.projectName;
+      if (!groups.has(key)) groups.set(key, { projectName: key, cells: { active: [], idle: [], ended: [] } });
+      groups.get(key)!.cells[s.status].push(s);
+    }
+    return [...groups.entries()].sort((a, b) => {
+      const aMax = Math.max(...Object.values(a[1].cells).flat().map(s => new Date(s.lastTimestamp).getTime()), 0);
+      const bMax = Math.max(...Object.values(b[1].cells).flat().map(s => new Date(s.lastTimestamp).getTime()), 0);
+      return bMax - aMax;
+    });
+  }, [sessions, groupByProject]);
 
   const handleDragStart = useCallback((session: RecentSession) => {
     draggedRef.current = session;
@@ -370,23 +398,66 @@ function KanbanBoard({ sessions, onNavigate, onStatusChange, groupByProject }: {
       onStatusChange(dragged.projectPath, dragged.id, targetStatus);
     }
     draggedRef.current = null;
-    setDragOverCol(null);
+    setDragOverCell(null);
   }, [onStatusChange]);
+
+  const STATUSES: SessionStatus[] = ['active', 'idle', 'ended'];
+
+  if (groupByProject && projectRows) {
+    return (
+      <div className="overflow-x-auto">
+        {/* Header row / 表头行 */}
+        <div className="grid grid-cols-[180px_1fr_1fr_1fr] gap-3 mb-3 sticky top-0">
+          <div />
+          {STATUSES.map((status) => {
+            const style = STATUS_STYLES[status];
+            return (
+              <div key={status} className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: style.bg }}>
+                <span className={`w-[7px] h-[7px] rounded-full ${status === 'active' ? 'animate-pulse' : ''}`} style={{ background: style.dot }} />
+                <span className="text-[12px] font-bold" style={{ color: style.text }}>{t(`recent.status_${status}`)}</span>
+              </div>
+            );
+          })}
+        </div>
+        {/* Project rows / 项目行 */}
+        {projectRows.map(([key, row]) => (
+          <div key={key} className="grid grid-cols-[180px_1fr_1fr_1fr] gap-3 mb-3">
+            <div className="flex items-start gap-2 pt-2 px-2 min-w-0">
+              <FolderOpen size={13} className="flex-shrink-0 mt-0.5" style={{ color: 'var(--accent)' }} />
+              <span className="text-[12px] font-bold truncate" style={{ color: 'var(--txt-1)' }} title={row.projectName}>{row.projectName}</span>
+            </div>
+            {STATUSES.map((status) => (
+              <KanbanCell
+                key={status}
+                status={status}
+                sessions={row.cells[status]}
+                onNavigate={onNavigate}
+                onDragStart={handleDragStart}
+                dragOver={dragOverCell === `${key}/${status}`}
+                onDragEnter={() => setDragOverCell(`${key}/${status}`)}
+                onDragLeave={() => setDragOverCell(null)}
+                onDrop={handleDrop}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="flex gap-4 overflow-x-auto pb-2">
-      {(['active', 'idle', 'ended'] as SessionStatus[]).map((status) => (
+      {STATUSES.map((status) => (
         <KanbanColumn
           key={status}
           status={status}
           sessions={columns[status]}
           onNavigate={onNavigate}
           onDragStart={handleDragStart}
-          dragOver={dragOverCol === status}
-          onDragEnter={(s) => setDragOverCol(s)}
-          onDragLeave={() => setDragOverCol(null)}
+          dragOver={dragOverCell === status}
+          onDragEnter={(s) => setDragOverCell(s)}
+          onDragLeave={() => setDragOverCell(null)}
           onDrop={handleDrop}
-          groupByProject={groupByProject}
         />
       ))}
     </div>
