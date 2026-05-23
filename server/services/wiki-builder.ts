@@ -525,8 +525,12 @@ function isNewCase(userText: string, prevTimestamp: string, currTimestamp: strin
 // ─── Turn building / 轮次构建 ─────────────────────────────────────────────────
 
 /**
- * Group messages into turns: each user message + following assistant messages.
- * 将消息分组为轮次：每条用户消息及其后续助手消息为一个轮次。
+ * Group messages into turns: each real user message + following assistant messages.
+ * Uses the same "real user message" definition as buildWikiSession so turnIndex
+ * values are consistent across nodes and turns.
+ *
+ * 将消息分组为轮次：每条真实用户消息及其后续助手消息为一个轮次。
+ * 与 buildWikiSession 使用相同的"真实用户消息"定义，保证 turnIndex 一致。
  */
 function buildTurns(
   messages: ParsedMessage[],
@@ -536,11 +540,12 @@ function buildTurns(
 ): WikiTurn[] {
   const turns: WikiTurn[] = [];
   let currentUserMsg: ParsedMessage | null = null;
-  let currentAsstUuids: string[] = [];
+  let currentAsstMsgs: ParsedMessage[] = [];  // keep full msgs, not just uuids
   let currentAsstText = '';
-  let turnIndex = 0;
+  let turnIndex = -1;  // incremented on each real user message, same as buildWikiSession
   let lineCounter = 0;
 
+  // Pre-index nodes by turnIndex / 按 turnIndex 预索引节点
   const nodesByTurnIndex = new Map<number, DagNode[]>();
   for (const node of nodes) {
     const existing = nodesByTurnIndex.get(node.turnIndex) ?? [];
@@ -549,7 +554,7 @@ function buildTurns(
   }
 
   const flushTurn = () => {
-    if (!currentUserMsg) return;
+    if (!currentUserMsg || turnIndex < 0) return;
 
     const rawUserText = extractTextBlocks(currentUserMsg.content);
     const userText = cleanUserText(rawUserText);
@@ -559,10 +564,10 @@ function buildTurns(
     const turnNodes = nodesByTurnIndex.get(turnIndex) ?? [];
     const toolCalls: WikiTurn['toolCalls'] = [];
 
-    for (const uuid of currentAsstUuids) {
-      const msg = messages.find((m) => m.uuid === uuid);
-      if (!msg) continue;
-      for (const block of msg.content) {
+    // Collect tool calls from assistant messages (use full msg objects, no re-lookup)
+    // 从助手消息收集工具调用（直接用消息对象，无需重查）
+    for (const aMsg of currentAsstMsgs) {
+      for (const block of aMsg.content) {
         if (block.type === 'tool_use') {
           const input = block.input ?? {};
           let inputSummary = '';
@@ -578,7 +583,7 @@ function buildTurns(
       uri,
       index: turnIndex,
       userUuid: currentUserMsg.uuid,
-      assistantUuids: currentAsstUuids,
+      assistantUuids: currentAsstMsgs.map((m) => m.uuid),
       timestamp: currentUserMsg.timestamp,
       userText,
       assistantText: currentAsstText.trim().slice(0, 500),
@@ -591,9 +596,8 @@ function buildTurns(
       },
     });
 
-    turnIndex++;
     currentUserMsg = null;
-    currentAsstUuids = [];
+    currentAsstMsgs = [];
     currentAsstText = '';
   };
 
@@ -602,15 +606,18 @@ function buildTurns(
     if (msg.role === 'system') continue;
 
     if (msg.role === 'user') {
+      // Skip pure tool-result injection messages — same guard as buildWikiSession
+      // 跳过纯 tool_result 注入消息，与 buildWikiSession 保持一致
+      if (msg.content.every((b: ContentBlock) => b.type === 'tool_result')) continue;
       const rawText = extractTextBlocks(msg.content);
       const cleaned = cleanUserText(rawText);
-      // Skip pure tool-result injection messages / 跳过纯工具结果注入消息
-      if (!cleaned || msg.content.every((b: ContentBlock) => b.type === 'tool_result')) continue;
+      if (!cleaned) continue;
 
       flushTurn();
+      turnIndex++;          // advance AFTER flush, same semantics as buildWikiSession
       currentUserMsg = msg;
     } else if (msg.role === 'assistant') {
-      currentAsstUuids.push(msg.uuid);
+      currentAsstMsgs.push(msg);
       const text = extractTextBlocks(msg.content);
       if (text) currentAsstText += (currentAsstText ? '\n' : '') + text;
     }
@@ -709,27 +716,43 @@ export async function buildWikiSession(
 ): Promise<WikiSession> {
   const { meta, messages } = await parseSessionFile(filePath);
 
-  // Step 1: Build all nodes from messages / 步骤1：从消息构建所有节点
+  // Step 1: Build all nodes — single forward pass, O(N)
+  // 步骤1：单次正向扫描构建所有节点，O(N)
+  //
+  // Key invariant: assistant messages belong to the SAME turn as the
+  // immediately preceding real user message. A "real" user message is one
+  // that has at least one non-tool_result text block and whose cleaned text
+  // is non-empty. Tool-result injection messages (role=user, all blocks are
+  // tool_result) do NOT advance the turn counter.
+  //
+  // 核心不变量：助手消息与其前一条真实用户消息属于同一轮次。
+  // 只有包含真实文本的用户消息才推进轮次计数器；纯 tool_result 注入不计。
   const allNodes: DagNode[] = [];
+  let currentTurnIdx = -1; // -1 = before first real user message
   let lineNumber = 0;
 
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i];
+  const isRealUserMessage = (msg: ParsedMessage): boolean => {
+    if (msg.role !== 'user') return false;
+    if (msg.content.every((b: ContentBlock) => b.type === 'tool_result')) return false;
+    const raw = extractTextBlocks(msg.content);
+    return cleanUserText(raw).length > 0;
+  };
+
+  for (const msg of messages) {
     lineNumber++;
 
-    // Assign turn index: count only "real" user messages before this
-    // 计算轮次索引：统计此消息之前的真实用户消息数
-    let turnIdx = 0;
-    for (let j = 0; j < i; j++) {
-      const m = messages[j];
-      if (m.role === 'user') {
-        const rawText = extractTextBlocks(m.content);
-        const cleaned = cleanUserText(rawText);
-        if (cleaned && !m.content.every((b: ContentBlock) => b.type === 'tool_result')) turnIdx++;
-      }
+    // Advance turn counter on each real user message BEFORE processing it
+    // 遇到真实用户消息时先推进计数器，再处理
+    if (isRealUserMessage(msg)) {
+      currentTurnIdx++;
     }
 
-    const msgNodes = buildNodesFromMessage(msg, turnIdx, projectId, meta.id, lineNumber);
+    // Skip messages that arrive before the first real user message
+    // (shouldn't happen in practice, but guards against edge cases)
+    // 跳过第一条真实用户消息之前的消息（实际不会出现，作为边界保护）
+    if (currentTurnIdx < 0) continue;
+
+    const msgNodes = buildNodesFromMessage(msg, currentTurnIdx, projectId, meta.id, lineNumber);
     allNodes.push(...msgNodes);
   }
 

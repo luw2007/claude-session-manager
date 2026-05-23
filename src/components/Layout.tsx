@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next';
 import {
   FolderTree, Search, Shield, BarChart3, Trash2, LogOut,
   Sun, Moon, ChevronLeft, Menu, WifiOff, Clock,
-  TrendingUp, Activity, Database, Network,
+  TrendingUp, Activity, Database,
 } from 'lucide-react';
 import { projects as projectsApi, invalidateEtagCache, type ProjectInfo, type SessionMeta } from '../utils/api';
 import { useSSE } from '../hooks/useSSE';
@@ -174,9 +174,11 @@ export default function Layout({ onLogout }: LayoutProps) {
     { id: 'projects', icon: <FolderTree size={20} />, label: t('nav.projects') },
     { id: 'search', icon: <Search size={20} />, label: t('nav.search') },
     { id: 'audit', icon: <Shield size={20} />, label: t('nav.audit') },
-    { id: 'wiki', icon: <Network size={20} />, label: t('wiki.title') },
     { id: 'trash', icon: <Trash2 size={20} />, label: t('trash.title') },
     { id: 'stats', icon: <BarChart3 size={20} />, label: t('nav.stats') },
+    // 'wiki' is intentionally excluded: it's session-scoped and only accessible
+    // via the "Open Wiki" button inside ChatViewer, not as a top-level nav item.
+    // wiki 不在这里——它是 session 级视图，只能从 ChatViewer 内部的"打开 Wiki"按钮进入。
   ];
 
   return (
@@ -357,15 +359,6 @@ export default function Layout({ onLogout }: LayoutProps) {
                 onBack={() => setView('projects')}
               />
             </Suspense>
-          )}
-          {view === 'wiki' && !selectedSession && (
-            <div className="empty-state h-full">
-              <div className="empty-state-icon"><Network size={28} /></div>
-              <p className="text-sm">{t('wiki.title')}</p>
-              <p className="text-2xs mt-1" style={{ color: 'var(--txt-3)' }}>
-                Select a session first, then click "Open Wiki"
-              </p>
-            </div>
           )}
           {view === 'trash' && (
             <Suspense fallback={<PanelFallback />}>

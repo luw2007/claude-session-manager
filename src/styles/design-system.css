@@ -635,3 +635,7 @@ h1, h2, h3, h4, h5 {
   font-size: 0.6875rem;
   line-height: 1rem;
 }
+
+.group:hover [data-pin-btn] {
+  opacity: 1 !important;
+}

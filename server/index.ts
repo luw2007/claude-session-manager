@@ -28,6 +28,7 @@ import authRoutes from './routes/auth.js';
 import sessionRoutes from './routes/sessions.js';
 import searchRoutes from './routes/search.js';
 import wikiRoutes from './routes/wiki.js';
+import pinRoutes from './routes/pins.js';
 
 const app = express();
 
@@ -91,6 +92,7 @@ app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1', requireAuth, sessionRoutes);
 app.use('/api/v1', requireAuth, searchRoutes);
 app.use('/api/v1', requireAuth, wikiRoutes);
+app.use('/api/v1', requireAuth, pinRoutes);
 
 // SSE endpoint for live updates / SSE 实时更新端点
 app.get('/api/v1/events', requireAuth, (req, res) => {

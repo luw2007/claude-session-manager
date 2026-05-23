@@ -224,10 +224,18 @@ function ListRow({ session, onNavigate, maxTokens, pinned, onTogglePin }: { sess
   );
 }
 
-function KanbanCard({ session, onNavigate, onDragStart }: { session: RecentSession; onNavigate: Props['onNavigate']; onDragStart: (session: RecentSession) => void }) {
+function KanbanCard({ session, onNavigate, onDragStart, onKeyMove }: { session: RecentSession; onNavigate: Props['onNavigate']; onDragStart: (session: RecentSession) => void; onKeyMove?: (session: RecentSession, direction: 'left' | 'right') => void }) {
   return (
     <div
       draggable
+      tabIndex={0}
+      role="listitem"
+      aria-label={session.summary || session.id}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowLeft' && onKeyMove) { e.preventDefault(); onKeyMove(session, 'left'); }
+        if (e.key === 'ArrowRight' && onKeyMove) { e.preventDefault(); onKeyMove(session, 'right'); }
+        if (e.key === 'Enter') { e.preventDefault(); onNavigate(session.projectPath, session.id); }
+      }}
       onDragStart={(e) => {
         onDragStart(session);
         e.dataTransfer.effectAllowed = 'move';
@@ -235,7 +243,7 @@ function KanbanCard({ session, onNavigate, onDragStart }: { session: RecentSessi
       }}
       onDragEnd={(e) => { (e.currentTarget as HTMLElement).style.opacity = '1'; }}
       onClick={() => onNavigate(session.projectPath, session.id)}
-      className="group card p-4 cursor-grab active:cursor-grabbing hover:translate-y-[-1px] animate-fade-in flex flex-col"
+      className="group card p-4 cursor-grab active:cursor-grabbing hover:translate-y-[-1px] animate-fade-in flex flex-col focus:outline-none focus:ring-2 focus:ring-[color:var(--accent)]"
     >
       <p
         className="text-[13px] font-semibold leading-snug mb-2 line-clamp-2 group-hover:text-[color:var(--accent)] transition-colors"
@@ -266,7 +274,7 @@ function KanbanCard({ session, onNavigate, onDragStart }: { session: RecentSessi
   );
 }
 
-function KanbanColumn({ status, sessions, onNavigate, onDrop, onDragStart, dragOver, onDragEnter, onDragLeave }: {
+function KanbanColumn({ status, sessions, onNavigate, onDrop, onDragStart, dragOver, onDragEnter, onDragLeave, onKeyMove }: {
   status: SessionStatus;
   sessions: RecentSession[];
   onNavigate: Props['onNavigate'];
@@ -275,6 +283,7 @@ function KanbanColumn({ status, sessions, onNavigate, onDrop, onDragStart, dragO
   dragOver: boolean;
   onDragEnter: (status: SessionStatus) => void;
   onDragLeave: () => void;
+  onKeyMove: (session: RecentSession, direction: 'left' | 'right') => void;
 }) {
   const { t } = useTranslation();
   const style = STATUS_STYLES[status];
@@ -282,10 +291,11 @@ function KanbanColumn({ status, sessions, onNavigate, onDrop, onDragStart, dragO
 
   return (
     <div
-      className="flex-1 min-w-[280px] flex flex-col rounded-xl transition-all h-[calc(100vh-320px)]"
+      className={`flex-1 min-w-[280px] flex flex-col rounded-xl transition-all max-h-[calc(100dvh-320px)] ${dragOver ? 'scale-[1.01]' : ''}`}
       style={{
         background: dragOver ? style.bg : 'var(--surface-1)',
         border: `1.5px ${dragOver ? 'dashed' : 'solid'} ${dragOver ? style.dot : 'var(--border-default)'}`,
+        boxShadow: dragOver ? `0 0 16px ${style.dot}33` : 'none',
       }}
       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
       onDragEnter={(e) => { e.preventDefault(); enterCount.current++; onDragEnter(status); }}
@@ -308,10 +318,15 @@ function KanbanColumn({ status, sessions, onNavigate, onDrop, onDragStart, dragO
         </span>
       </div>
       <div className="flex-1 overflow-y-auto p-3 pt-1 space-y-2.5">
+        {dragOver && (
+          <div className="rounded-lg border-2 border-dashed p-4 animate-pulse" style={{ borderColor: style.dot, background: `${style.dot}11` }}>
+            <div className="h-2 w-2/3 rounded" style={{ background: `${style.dot}33` }} />
+          </div>
+        )}
         {sessions.map((session) => (
-          <KanbanCard key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} onDragStart={onDragStart} />
+          <KanbanCard key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} onDragStart={onDragStart} onKeyMove={onKeyMove} />
         ))}
-        {sessions.length === 0 && (
+        {sessions.length === 0 && !dragOver && (
           <div className="text-center py-8 text-[12px]" style={{ color: 'var(--txt-3)' }}>
             {t('recent.kanban_empty')}
           </div>
@@ -321,7 +336,7 @@ function KanbanColumn({ status, sessions, onNavigate, onDrop, onDragStart, dragO
   );
 }
 
-function KanbanCell({ status, sessions, onNavigate, onDragStart, onDrop, dragOver, onDragEnter, onDragLeave }: {
+function KanbanCell({ status, sessions, onNavigate, onDragStart, onDrop, dragOver, onDragEnter, onDragLeave, onKeyMove }: {
   status: SessionStatus;
   sessions: RecentSession[];
   onNavigate: Props['onNavigate'];
@@ -330,27 +345,34 @@ function KanbanCell({ status, sessions, onNavigate, onDragStart, onDrop, dragOve
   dragOver: boolean;
   onDragEnter: (status: SessionStatus) => void;
   onDragLeave: () => void;
+  onKeyMove: (session: RecentSession, direction: 'left' | 'right') => void;
 }) {
   const { t } = useTranslation();
   const style = STATUS_STYLES[status];
   const enterCount = useRef(0);
   return (
     <div
-      className="flex-1 min-w-[200px] rounded-lg p-2 space-y-2 transition-all min-h-[60px]"
+      className={`flex-1 min-w-[200px] rounded-lg p-2 space-y-2 transition-all min-h-[60px] ${dragOver ? 'scale-[1.02]' : ''}`}
       style={{
         background: dragOver ? style.bg : 'transparent',
-        border: `1px ${dragOver ? 'dashed' : 'dashed'} ${dragOver ? style.dot : 'var(--border-default)'}`,
+        border: `1.5px ${dragOver ? 'dashed' : 'dashed'} ${dragOver ? style.dot : 'var(--border-default)'}`,
         opacity: dragOver ? 1 : 0.8,
+        boxShadow: dragOver ? `0 0 12px ${style.dot}33` : 'none',
       }}
       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
       onDragEnter={(e) => { e.preventDefault(); enterCount.current++; onDragEnter(status); }}
       onDragLeave={() => { enterCount.current--; if (enterCount.current <= 0) { enterCount.current = 0; onDragLeave(); } }}
       onDrop={(e) => { e.preventDefault(); enterCount.current = 0; onDrop(status); }}
     >
+      {dragOver && (
+        <div className="rounded-lg border-2 border-dashed p-3 mb-1 animate-pulse" style={{ borderColor: style.dot, background: `${style.dot}11` }}>
+          <div className="h-2 w-2/3 rounded" style={{ background: `${style.dot}33` }} />
+        </div>
+      )}
       {sessions.map((session) => (
-        <KanbanCard key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} onDragStart={onDragStart} />
+        <KanbanCard key={`${session.projectPath}/${session.id}`} session={session} onNavigate={onNavigate} onDragStart={onDragStart} onKeyMove={onKeyMove} />
       ))}
-      {sessions.length === 0 && (
+      {sessions.length === 0 && !dragOver && (
         <div className="text-center py-3 text-[10px]" style={{ color: 'var(--txt-3)' }}>—</div>
       )}
     </div>
@@ -398,6 +420,14 @@ function KanbanBoard({ sessions, onNavigate, onStatusChange, groupByProject }: {
     draggedRef.current = session;
   }, []);
 
+  const handleKeyMove = useCallback((session: RecentSession, direction: 'left' | 'right') => {
+    const STATUSES_ARR: SessionStatus[] = ['active', 'idle', 'ended'];
+    const idx = STATUSES_ARR.indexOf(session.status);
+    const newIdx = direction === 'left' ? idx - 1 : idx + 1;
+    if (newIdx < 0 || newIdx >= STATUSES_ARR.length) return;
+    onStatusChange(session.projectPath, session.id, STATUSES_ARR[newIdx]);
+  }, [onStatusChange]);
+
   const handleDrop = useCallback((targetStatus: SessionStatus) => {
     const dragged = draggedRef.current;
     if (dragged && dragged.status !== targetStatus) {
@@ -444,20 +474,25 @@ function KanbanBoard({ sessions, onNavigate, onStatusChange, groupByProject }: {
     if (!groupByProject || !projectRows) { setCurrentProject(null); return; }
     const scrollParent = headerRef.current?.closest('.overflow-y-auto');
     if (!scrollParent) return;
+    let rafId = 0;
     const handleScroll = () => {
-      const headerBottom = headerRef.current?.getBoundingClientRect().bottom ?? 0;
-      let found: string | null = null;
-      for (const [key] of projectRows) {
-        const el = rowRefs.current.get(key);
-        if (!el) continue;
-        const rect = el.getBoundingClientRect();
-        if (rect.top <= headerBottom + 8) found = key;
-      }
-      setCurrentProject(found);
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        const headerBottom = headerRef.current?.getBoundingClientRect().bottom ?? 0;
+        let found: string | null = null;
+        for (const [key] of projectRows) {
+          const el = rowRefs.current.get(key);
+          if (!el) continue;
+          const rect = el.getBoundingClientRect();
+          if (rect.top <= headerBottom + 8) found = key;
+        }
+        setCurrentProject(found);
+      });
     };
     scrollParent.addEventListener('scroll', handleScroll, { passive: true });
     handleScroll();
-    return () => scrollParent.removeEventListener('scroll', handleScroll);
+    return () => { scrollParent.removeEventListener('scroll', handleScroll); cancelAnimationFrame(rafId); };
   }, [groupByProject, projectRows]);
 
   const STATUSES: SessionStatus[] = ['active', 'idle', 'ended'];
@@ -532,6 +567,7 @@ function KanbanBoard({ sessions, onNavigate, onStatusChange, groupByProject }: {
                     onDragEnter={() => setDragOverCell(`${key}/${status}`)}
                     onDragLeave={() => setDragOverCell(null)}
                     onDrop={handleDrop}
+                    onKeyMove={handleKeyMove}
                   />
                 ))}
                 {collapsed && (
@@ -570,6 +606,7 @@ function KanbanBoard({ sessions, onNavigate, onStatusChange, groupByProject }: {
           onDragEnter={(s) => setDragOverCell(s)}
           onDragLeave={() => setDragOverCell(null)}
           onDrop={handleDrop}
+          onKeyMove={handleKeyMove}
         />
       ))}
     </div>
@@ -582,13 +619,25 @@ export default function RecentPanel({ onNavigate }: Props) {
   const { t } = useTranslation();
   const [sessions, setSessions] = useState<RecentSession[]>([]);
   const [loading, setLoading] = useState(true);
-  const [hours, setHours] = useState(24);
+  const [hours, setHours] = useState(() => {
+    const saved = localStorage.getItem('csm:recent:hours');
+    return saved ? parseFloat(saved) : 24;
+  });
   const [spinning, setSpinning] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>('board');
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const saved = localStorage.getItem('csm:recent:viewMode');
+    return (saved === 'list' || saved === 'board' || saved === 'kanban') ? saved : 'board';
+  });
   const [statusFilter, setStatusFilter] = useState<SessionStatus | 'all'>('all');
-  const [groupByProject, setGroupByProject] = useState(false);
+  const [groupByProject, setGroupByProject] = useState(() => {
+    return localStorage.getItem('csm:recent:groupByProject') === 'true';
+  });
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
   const [pinnedSet, setPinnedSet] = useState<Set<string>>(new Set());
+
+  useEffect(() => { localStorage.setItem('csm:recent:hours', String(hours)); }, [hours]);
+  useEffect(() => { localStorage.setItem('csm:recent:viewMode', viewMode); }, [viewMode]);
+  useEffect(() => { localStorage.setItem('csm:recent:groupByProject', String(groupByProject)); }, [groupByProject]);
 
   useEffect(() => {
     pinsApi.list().then(({ pins }) => {

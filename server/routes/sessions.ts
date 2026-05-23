@@ -34,6 +34,16 @@ function loadStatusOverrides() {
   if (existsSync(STATUS_FILE)) {
     try { statusOverrides = JSON.parse(readFileSync(STATUS_FILE, 'utf-8')); } catch { statusOverrides = {}; }
   }
+  // Prune stale entries / 清理不存在的会话
+  const projectsDir = join(config.claudeDir, 'projects');
+  let dirty = false;
+  for (const key of Object.keys(statusOverrides)) {
+    const [projectPath, sessionId] = key.split('/');
+    if (!projectPath || !sessionId) { delete statusOverrides[key]; dirty = true; continue; }
+    const jsonlPath = join(projectsDir, projectPath, `${sessionId}.jsonl`);
+    if (!existsSync(jsonlPath)) { delete statusOverrides[key]; dirty = true; }
+  }
+  if (dirty) saveStatusOverrides();
 }
 function saveStatusOverrides() {
   writeFileSync(STATUS_FILE, JSON.stringify(statusOverrides, null, 2));
